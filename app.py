@@ -15,17 +15,17 @@ DATA_FILE = "voorspellingen.json"
 
 # WK 2026 Groepen
 GROEPEN = {
-    "A": ["Mexico", "Zuid-Afrika", "Zuid-Korea", "Winnaar UEFA playoff D"],
-    "B": ["Canada", "Winnaar UEFA playoff A", "Qatar", "Zwitserland"],
+    "A": ["Mexico", "Zuid-Afrika", "Zuid-Korea", "Tsjechië"],
+    "B": ["Canada", "Bosnië & Herz.", "Qatar", "Zwitserland"],
     "C": ["Brazilie", "Marokko", "Haiti", "Schotland"],
-    "D": ["Verenigde Staten", "Paraguay", "Australie", "Winnaar UEFA playoff C"],
+    "D": ["Verenigde Staten", "Paraguay", "Australie", "Turkije"],
     "E": ["Duitsland", "Curacao", "Ivoorkust", "Ecuador"],
-    "F": ["Nederland", "Japan", "Winnaar UEFA playoff B", "Tunesie"],
+    "F": ["Nederland", "Japan", "Zweden", "Tunesie"],
     "G": ["Belgie", "Egypte", "Iran", "Nieuw-Zeeland"],
     "H": ["Spanje", "Kaapverdie", "Saudi-Arabie", "Uruguay"],
-    "I": ["Frankrijk", "Senegal", "Winnaar IC playoff 2", "Noorwegen"],
+    "I": ["Frankrijk", "Senegal", "Irak", "Noorwegen"],
     "J": ["Argentinie", "Algerije", "Oostenrijk", "Jordanie"],
-    "K": ["Portugal", "Winnaar IC playoff 1", "Oezbekistan", "Colombia"],
+    "K": ["Portugal", "Congo-Kinshasa", "Oezbekistan", "Colombia"],
     "L": ["Engeland", "Kroatie", "Ghana", "Panama"],
 }
 
