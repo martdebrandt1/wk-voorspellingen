@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """
 WK 2026 Voorspellingstool - Web App (48 teams, 12 groepen)
-Met puntensysteem, publiek scoreboard, en admin resultaten-invoer via dezelfde UI
+Met puntensysteem, publiek scoreboard, en SQLite database voor Render hosting
 """
 
 from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for
 import json
 import os
+import sqlite3
 from datetime import datetime
 from functools import wraps
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'wk2026-geheim-sleutel-verander-dit!')
 
-DATA_FILE = "voorspellingen.json"
-RESULTS_FILE = "echte_resultaten.json"
+# Database pad - gebruik /opt/render/project/src/ voor Render persistent disk
+# Of gewoon in working directory als fallback
+DB_FILE = os.environ.get('DB_PATH', 'wk2026.db')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin2026')
 
 # WK 2026 Groepen
@@ -48,28 +50,82 @@ PUNTEN = {
 }
 
 
+# ============================================================
+# DATABASE FUNCTIES
+# ============================================================
+
+def init_db():
+    """Maak database tabellen aan als ze niet bestaan"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS voorspellingen (
+            naam TEXT PRIMARY KEY,
+            data TEXT NOT NULL,
+            datum TEXT NOT NULL
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS echte_resultaten (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            data TEXT NOT NULL,
+            datum TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
 def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
+    """Laad alle voorspellingen uit de database"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT naam, data FROM voorspellingen")
+    rows = c.fetchall()
+    conn.close()
+    result = {}
+    for naam, data in rows:
+        result[naam] = json.loads(data)
+    return result
 
 
-def save_data(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+def save_prediction(naam, data):
+    """Sla een voorspelling op (insert of update)"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    datum = datetime.now().strftime("%Y-%m-%d %H:%M")
+    data['datum'] = datum
+    c.execute(
+        "INSERT OR REPLACE INTO voorspellingen (naam, data, datum) VALUES (?, ?, ?)",
+        (naam, json.dumps(data, ensure_ascii=False), datum)
+    )
+    conn.commit()
+    conn.close()
 
 
 def load_results():
-    if os.path.exists(RESULTS_FILE):
-        with open(RESULTS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+    """Laad echte resultaten uit de database"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT data FROM echte_resultaten WHERE id = 1")
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return json.loads(row[0])
     return {}
 
 
 def save_results(data):
-    with open(RESULTS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    """Sla echte resultaten op"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    datum = datetime.now().strftime("%Y-%m-%d %H:%M")
+    c.execute(
+        "INSERT OR REPLACE INTO echte_resultaten (id, data, datum) VALUES (1, ?, ?)",
+        (json.dumps(data, ensure_ascii=False), datum)
+    )
+    conn.commit()
+    conn.close()
 
 
 def admin_required(f):
@@ -204,7 +260,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WK 2026 Voorspellingstool AZ St Blasius</title>
+    <title>AZ St Blasius - WK 2026</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -321,7 +377,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h1>&#9917; WK 2026 Voorspellingen</h1>
+        <h1>&#9917; AZ St Blasius - WK 2026</h1>
         <p class="subtitle">Vul je voorspellingen in voor het WK 2026!</p>
         <div class="nav-links">
             <a href="/scoreboard">&#127942; Scoreboard</a>
@@ -705,7 +761,7 @@ HTML_TEMPLATE = """
 """
 
 # ============================================================
-# SCOREBOARD - Publiek, iedereen kan dit zien
+# SCOREBOARD - Publiek
 # ============================================================
 SCOREBOARD_TEMPLATE = """
 <!DOCTYPE html>
@@ -713,7 +769,7 @@ SCOREBOARD_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scoreboard - WK 2026</title>
+    <title>AZ St Blasius - WK 2026 Scoreboard</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -767,7 +823,7 @@ SCOREBOARD_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h1>&#127942; Scoreboard</h1>
+        <h1>&#127942; AZ St Blasius - WK 2026</h1>
         <p class="subtitle">Live rangschikking van alle deelnemers</p>
         <div class="nav-links">
             <a href="/">&#9917; Voorspelling invullen</a>
@@ -851,7 +907,7 @@ ADMIN_LOGIN_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Login - WK 2026</title>
+    <title>AZ St Blasius - WK 2026 Admin</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -895,7 +951,7 @@ ADMIN_LOGIN_TEMPLATE = """
 """
 
 # ============================================================
-# ADMIN DASHBOARD - Met dezelfde stap-voor-stap UI voor echte resultaten
+# ADMIN DASHBOARD
 # ============================================================
 ADMIN_TEMPLATE = """
 <!DOCTYPE html>
@@ -903,7 +959,7 @@ ADMIN_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - WK 2026</title>
+    <title>AZ St Blasius - WK 2026 Admin</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -1010,7 +1066,7 @@ ADMIN_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h1>&#128272; Admin Dashboard</h1>
+        <h1>&#128272; AZ St Blasius - Admin</h1>
         <p class="subtitle">Beheer echte resultaten en bekijk alle voorspellingen</p>
         <div class="nav-links">
             <a href="/">&#9917; Home</a>
@@ -1024,11 +1080,11 @@ ADMIN_TEMPLATE = """
             <div class="tab" data-tab="all-predictions">&#128203; Alle Voorspellingen</div>
         </div>
 
-        <!-- RESULTS INPUT TAB - Dezelfde UI als speler-invoer -->
+        <!-- RESULTS INPUT TAB -->
         <div class="tab-content active" id="tab-results-input">
             <div class="card">
                 <h2>&#9989; Echte Resultaten Invullen</h2>
-                <p class="drag-hint">Vul de echte resultaten in op dezelfde manier als spelers hun voorspellingen invoeren. Sleep of gebruik pijltjes om de eindstand per groep aan te geven.</p>
+                <p class="drag-hint">Vul de echte resultaten in op dezelfde manier als spelers hun voorspellingen invoeren.</p>
 
                 <div class="step-indicator" style="margin: 20px 0;">
                     <div class="step active" id="admin-step-ind-1">1. Groepsfase</div>
@@ -1036,7 +1092,6 @@ ADMIN_TEMPLATE = """
                     <div class="step" id="admin-step-ind-3">3. Knock-out</div>
                 </div>
 
-                <!-- Admin Step 1: Groups -->
                 <div id="admin-step-1">
                     <h3>Eindstand Groepsfase</h3>
                     <p class="drag-hint">Zet de teams in de juiste volgorde (1 = groepswinnaar, 4 = laatste)</p>
@@ -1046,7 +1101,6 @@ ADMIN_TEMPLATE = """
                     </div>
                 </div>
 
-                <!-- Admin Step 2: Best Thirds -->
                 <div id="admin-step-2" class="hidden">
                     <h3>Beste Nummers 3</h3>
                     <p class="drag-hint">Selecteer welke 8 nummers 3 zijn doorgegaan</p>
@@ -1058,7 +1112,6 @@ ADMIN_TEMPLATE = """
                     </div>
                 </div>
 
-                <!-- Admin Step 3: Knockout -->
                 <div id="admin-step-3" class="hidden">
                     <h3>Knock-out Resultaten</h3>
                     <p class="drag-hint">Klik op het team dat daadwerkelijk gewonnen heeft</p>
@@ -1100,7 +1153,7 @@ ADMIN_TEMPLATE = """
     var adminKnockoutSelections = {};
     var adminCurrentStep = 1;
 
-    // ============ TAB NAVIGATION ============
+    // Tab navigation
     document.querySelectorAll('.tab').forEach(function(tab) {
         tab.addEventListener('click', function() {
             document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
@@ -1110,7 +1163,6 @@ ADMIN_TEMPLATE = """
         });
     });
 
-    // ============ ADMIN RESULTS INPUT (same UI as player) ============
     function adminGoToStep(step) {
         if (step === 2) {
             adminGroupResults = adminGetGroupResults();
@@ -1358,35 +1410,26 @@ ADMIN_TEMPLATE = """
 
     function adminSaveResults() {
         var groups = adminGetGroupResults();
-
         if (!adminKnockoutSelections.final_round || adminKnockoutSelections.final_round[0] === undefined) {
             alert('Vul alle knock-outwedstrijden in!'); return;
         }
-
         var data = {
             groepsfase: groups,
             beste_derdes: adminSelectedThirds.map(function(g) { return { groep: g, team: adminGroupResults[g][2] }; }),
             knockout: {
-                ronde_van_32: adminKnockoutSelections.r32,
-                ronde_van_16: adminKnockoutSelections.r16,
-                kwartfinales: adminKnockoutSelections.qf,
-                halve_finales: adminKnockoutSelections.sf,
+                ronde_van_32: adminKnockoutSelections.r32, ronde_van_16: adminKnockoutSelections.r16,
+                kwartfinales: adminKnockoutSelections.qf, halve_finales: adminKnockoutSelections.sf,
                 finale: adminKnockoutSelections.final_round[0]
             }
         };
-
-        fetch('/api/admin/results', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
-        })
+        fetch('/api/admin/results', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
         .then(function(res) { return res.json(); })
         .then(function(result) {
             var status = document.getElementById('admin-save-status');
             status.classList.remove('hidden');
             if (result.success) {
                 status.className = 'status-msg success';
-                status.innerHTML = '&#9989; Resultaten opgeslagen! Punten worden automatisch herberekend voor alle spelers.';
+                status.innerHTML = '&#9989; Resultaten opgeslagen! Punten worden automatisch herberekend.';
                 loadAdminLeaderboard();
             } else {
                 status.className = 'status-msg error';
@@ -1401,7 +1444,6 @@ ADMIN_TEMPLATE = """
         });
     }
 
-    // ============ ADMIN LEADERBOARD ============
     function loadAdminLeaderboard() {
         fetch('/api/scoreboard')
         .then(function(res) { return res.json(); })
@@ -1433,7 +1475,6 @@ ADMIN_TEMPLATE = """
         });
     }
 
-    // ============ ALL PREDICTIONS ============
     function loadAllPredictions() {
         fetch('/api/predictions')
         .then(function(res) { return res.json(); })
@@ -1462,7 +1503,7 @@ ADMIN_TEMPLATE = """
         });
     }
 
-    // ============ EVENT LISTENERS ============
+    // Event listeners
     document.getElementById('admin-btn-next-1').addEventListener('click', function() { adminGoToStep(2); });
     document.getElementById('admin-btn-back-2').addEventListener('click', function() { adminGoToStep(1); });
     document.getElementById('admin-btn-next-2').addEventListener('click', function() { adminGoToStep(3); });
@@ -1474,19 +1515,17 @@ ADMIN_TEMPLATE = """
     loadAdminLeaderboard();
     loadAllPredictions();
 
-    // Load existing results and pre-fill
+    // Load existing results and pre-fill group order
     fetch('/api/admin/results')
     .then(function(res) { return res.json(); })
     .then(function(data) {
         if (!data || !data.groepsfase || Object.keys(data.groepsfase).length === 0) return;
-        // Pre-fill group order
         var groups = Object.keys(data.groepsfase);
         for (var g = 0; g < groups.length; g++) {
             var group = groups[g];
             var savedOrder = data.groepsfase[group];
             var list = document.getElementById('admin-group-' + group);
             if (!list || !savedOrder) continue;
-            // Reorder list items based on saved data
             for (var i = 0; i < savedOrder.length; i++) {
                 var items = list.querySelectorAll('li');
                 for (var j = 0; j < items.length; j++) {
@@ -1561,10 +1600,7 @@ def submit():
         naam = data.get('naam', '').strip()
         if not naam:
             return jsonify({"success": False, "error": "Naam is verplicht"})
-        data['datum'] = datetime.now().strftime("%Y-%m-%d %H:%M")
-        all_predictions = load_data()
-        all_predictions[naam] = data
-        save_data(all_predictions)
+        save_prediction(naam, data)
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -1577,20 +1613,13 @@ def get_predictions():
 
 @app.route('/api/scoreboard', methods=['GET'])
 def get_scoreboard():
-    """Publieke API - iedereen kan dit zien"""
     all_predictions = load_data()
     real_results = load_results()
-
     players = []
     for naam, pred in all_predictions.items():
         points = calculate_points(pred, real_results)
         kampioen = pred.get('knockout', {}).get('finale', '?')
-        players.append({
-            "naam": naam,
-            "kampioen": kampioen,
-            "points": points
-        })
-
+        players.append({"naam": naam, "kampioen": kampioen, "points": points})
     players.sort(key=lambda x: x["points"]["totaal"], reverse=True)
     return jsonify({
         "players": players,
@@ -1602,10 +1631,8 @@ def get_scoreboard():
 def admin_results():
     if request.method == 'GET':
         return jsonify(load_results())
-
     if not session.get('is_admin'):
         return jsonify({"success": False, "error": "Niet geautoriseerd"})
-
     try:
         data = request.get_json()
         save_results(data)
@@ -1613,6 +1640,13 @@ def admin_results():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+
+# ============================================================
+# START APP
+# ============================================================
+
+# Initialiseer database bij opstarten
+init_db()
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
