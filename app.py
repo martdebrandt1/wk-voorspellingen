@@ -1,4 +1,4 @@
-code = '''#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 WK 2026 Voorspellingstool - Web App (48 teams, 12 groepen)
 Met puntensysteem, individuele resultaatpagina, en admin overzicht
@@ -1471,17 +1471,17 @@ function saveResults() {
         var status = document.getElementById('save-status');
         if (data.success) {
             status.className = 'status-msg success';
-            status.textContent = '\\u2705 Resultaten succesvol opgeslagen! Punten worden automatisch herberekend.';
+            status.textContent = '\u2705 Resultaten succesvol opgeslagen! Punten worden automatisch herberekend.';
             loadLeaderboard();
         } else {
             status.className = 'status-msg error';
-            status.textContent = '\\u274c Fout: ' + data.error;
+            status.textContent = '\u274c Fout: ' + data.error;
         }
     })
     .catch(function(err) {
         var status = document.getElementById('save-status');
         status.className = 'status-msg error';
-        status.textContent = '\\u274c Fout bij opslaan: ' + err.message;
+        status.textContent = '\u274c Fout bij opslaan: ' + err.message;
     });
 }
 
@@ -1649,49 +1649,3 @@ def admin_leaderboard():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-'''
-
-with open('/mnt/data/wk2026_app.py', 'w', encoding='utf-8') as f:
-    f.write(code)
-
-print("✅ Bestand succesvol aangemaakt: wk2026_app.py")
-print("\n" + "="*60)
-print("📋 SAMENVATTING VAN WIJZIGINGEN:")
-print("="*60)
-print("""
-🆕 NIEUWE FEATURES:
-
-1. 🔒 SPELER ZIET ENKEL EIGEN RESULTAAT
-   - Nieuwe pagina: /mijn-resultaat
-   - Speler vult naam in → ziet ENKEL eigen punten & ranking
-   - Geen toegang tot andere spelers hun voorspellingen
-
-2. 📊 ADMIN RESULTATEN DASHBOARD (/admin)
-   - Wachtwoord-beschermd (standaard: 'admin2026')
-   - Rangschikking/leaderboard met alle spelers
-   - Echte resultaten invullen (groepsfase + knockout)
-   - Alle voorspellingen bekijken
-
-3. 🏆 AUTOMATISCH PUNTENSYSTEEM
-   - 1 pt: per team op juiste positie in groep
-   - 2 pt: juiste groepswinnaar
-   - 1 pt: juiste #2 in groep
-   - 2 pt: per juiste beste derde
-   - 3 pt: 1/16e finale juist team door
-   - 5 pt: 1/8e finale juist team door
-   - 7 pt: kwartfinale juist team door
-   - 10 pt: halve finale juist team door
-   - 12 pt: juiste finalist
-   - 15 pt: juiste wereldkampioen
-   
-   MAXIMUM: 275 punten
-
-4. 📱 PAGINA'S:
-   /              → Voorspelling invullen (ongewijzigd)
-   /mijn-resultaat → Eigen resultaat bekijken (NIEUW)
-   /admin         → Admin dashboard (NIEUW, wachtwoord-beschermd)
-
-5. ⚙️ CONFIGURATIE:
-   - ADMIN_PASSWORD = 'admin2026' (pas aan via env var)
-   - SECRET_KEY voor sessions (pas aan via env var)
-""")
