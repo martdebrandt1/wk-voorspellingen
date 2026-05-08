@@ -1,17 +1,4 @@
-# WK 2026 groepen op basis van de afbeelding
-# 12 groepen, 4 teams per groep
-# Sommige plekken zijn nog playoffs - ik zet die er gewoon in als "Winnaar UEFA playoff X"
-
-# Nu moet ik ook de knock-out structuur aanpassen voor 48 teams:
-# Top 2 per groep (24) + 8 beste nummers 3 = 32 teams
-# Dan 1/16 finales (16 wedstrijden) → 1/8 finales → kwartfinales → halve finales → finale
-
-# Voor de voorspellingstool: de gebruiker moet ook voorspellen WELKE nummers 3 doorgaan
-# Dat maakt het complex. Alternatief: gewoon top 2 per groep + laat ze de 8 beste #3 kiezen.
-
-# Laat me de volledige app herschrijven met het 48-team format
-
-code = '''#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 WK 2026 Voorspellingstool - Web App (48 teams, 12 groepen)
 """
@@ -468,12 +455,12 @@ function renderRound(container, title, matches, roundKey) {
     let html = '<h3>' + title + '</h3>';
     for (let i = 0; i < matches.length; i++) {
         const m = matches[i];
-        const t1safe = m.team1.replace(/'/g, "\\\\'");
-        const t2safe = m.team2.replace(/'/g, "\\\\'");
+        const t1safe = m.team1.replace(/'/g, "\\'");
+        const t2safe = m.team2.replace(/'/g, "\\'");
         html += '<div class="match-card">';
-        html += '<div class="match-team" id="' + roundKey + '-' + i + '-1" onclick="selectWinner(\\'' + roundKey + '\\', ' + i + ', 1, \\'' + t1safe + '\\')">' + m.team1 + '</div>';
+        html += '<div class="match-team" id="' + roundKey + '-' + i + '-1" onclick="selectWinner(\'' + roundKey + '\', ' + i + ', 1, \'' + t1safe + '\')">' + m.team1 + '</div>';
         html += '<span class="match-vs">VS</span>';
-        html += '<div class="match-team" id="' + roundKey + '-' + i + '-2" onclick="selectWinner(\\'' + roundKey + '\\', ' + i + ', 2, \\'' + t2safe + '\\')">' + m.team2 + '</div>';
+        html += '<div class="match-team" id="' + roundKey + '-' + i + '-2" onclick="selectWinner(\'' + roundKey + '\', ' + i + ', 2, \'' + t2safe + '\')">' + m.team2 + '</div>';
         html += '</div>';
     }
     div.innerHTML = html;
@@ -691,17 +678,3 @@ def get_predictions():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-'''
-
-with open('/mnt/data/app.py', 'w', encoding='utf-8') as f:
-    f.write(code)
-
-print("✅ app.py herschreven voor WK 2026 (48 teams, 12 groepen)!")
-print()
-print("Wat is er veranderd:")
-print("=" * 50)
-print("1. ✅ 12 groepen (A t/m L) met de juiste teams")
-print("2. ✅ Nieuwe stap: 'Beste Nummers 3' selecteren (8 van 12)")
-print("3. ✅ Knock-out: 1/16 finales → 1/8 → kwartfinales → halve finales → finale")
-print("4. ✅ 32 teams in de knock-outfase")
-print("5. ✅ JavaScript bug gefixt (geen code meer als tekst)")
