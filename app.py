@@ -132,12 +132,22 @@ def calculate_points(prediction, real_results):
             if i < len(real_order) and real_order[i] == team:
                 points["groep_positie"] += PUNTEN["groep_juiste_positie"]
 
-    real_thirds = real_results.get("beste_derdes", [])
-    pred_thirds = prediction.get("beste_derdes", [])
-    if real_thirds and pred_thirds:
-        rt = set(item.get("team","") if isinstance(item,dict) else str(item) for item in real_thirds)
-        pt = set(item.get("team","") if isinstance(item,dict) else str(item) for item in pred_thirds)
-        points["beste_derdes"] = len(rt & pt) * PUNTEN["beste_derde_juist"]
+    # Beste derdes - derived from third_assignments
+    def get_third_groups(data):
+        ta = data.get("third_assignments", {})
+        if ta:
+            return set(ta.values())
+        result = set()
+        for item in data.get("beste_derdes", []):
+            if isinstance(item, dict) and item.get("groep"):
+                result.add(item["groep"])
+        return result
+
+    real_third_groups = get_third_groups(real_results)
+    pred_third_groups = get_third_groups(prediction)
+    if real_third_groups and pred_third_groups:
+        correct = len(real_third_groups & pred_third_groups)
+        points["beste_derdes"] = correct * PUNTEN["beste_derde_juist"]
 
     real_ko = real_results.get("knockout", {})
     pred_ko = prediction.get("knockout", {})
@@ -165,11 +175,6 @@ def calculate_points(prediction, real_results):
                           "beste_derdes","r32","r16","qf","sf","finalist","winnaar"])
     return points
 
-
-# ============================================================
-# SHARED JS for knockout (used in both player + admin templates)
-# ============================================================
-# We will inject one shared script. Player uses id prefix '', admin uses 'admin-'.
 
 # ============================================================
 # MAIN PAGE
@@ -208,10 +213,6 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 .position-badge { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.8em; font-weight:bold; }
 .pos-1 { background:#ffd700; color:#000; } .pos-2 { background:#c0c0c0; color:#000; }
 .pos-3 { background:#cd7f32; color:#fff; } .pos-4 { background:#555; color:#fff; }
-.third-place-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:8px; margin:16px 0; }
-.third-place-option { padding:10px; border-radius:8px; text-align:center; background:rgba(255,255,255,0.05); border:2px solid rgba(255,255,255,0.1); cursor:pointer; }
-.third-place-option:hover { background:rgba(255,255,255,0.1); }
-.third-place-option.selected { background:rgba(46,204,113,0.2); border-color:#2ecc71; }
 .match-card { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; margin-bottom:10px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:10px; gap:10px; }
 .match-team { flex:1; text-align:center; padding:10px; border-radius:8px; cursor:pointer; border:2px solid transparent; }
 .match-team:hover { background:rgba(255,255,255,0.1); }
@@ -231,7 +232,6 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 .trophy { font-size:4em; margin-bottom:20px; }
 .champion-name { font-size:1.5em; color:#ffd700; margin:16px 0; }
 .drag-hint { color:#888; font-size:0.85em; margin-bottom:12px; font-style:italic; }
-.counter { color:#f0a500; font-weight:bold; margin:8px 0; }
 .error-msg { color:#e94560; font-size:0.9em; margin-top:8px; display:none; }
 .error-msg.show { display:block; }
 .third-assign-select { width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.4); color:#fff; border:2px solid rgba(255,255,255,0.2); font-size:1em; }
@@ -246,9 +246,8 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 <div class="step-indicator">
 <div class="step active" id="step-ind-1">1. Naam</div>
 <div class="step" id="step-ind-2">2. Groepsfase</div>
-<div class="step" id="step-ind-3">3. Beste #3</div>
-<div class="step" id="step-ind-4">4. Knock-out</div>
-<div class="step" id="step-ind-5">5. Klaar!</div>
+<div class="step" id="step-ind-3">3. Knock-out</div>
+<div class="step" id="step-ind-4">4. Klaar!</div>
 </div>
 
 <div id="step-1" class="card">
@@ -269,26 +268,15 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 </div>
 
 <div id="step-3" class="card hidden">
-<h2>&#127941; Beste Nummers 3</h2>
-<p class="drag-hint">Selecteer welke 8 nummers 3 doorgaan</p>
-<p class="counter" id="third-counter">Geselecteerd: 0 / 8</p>
-<div class="third-place-grid" id="third-place-container"></div>
-<div class="btn-group">
-<button class="btn btn-secondary" id="btn-back-3">&#8592; Terug</button>
-<button class="btn btn-primary" id="btn-to-knockout" disabled>Volgende &#8594;</button>
-</div>
-</div>
-
-<div id="step-4" class="card hidden">
 <h2>&#127942; Knock-outfase</h2>
 <div id="knockout-container"></div>
 <div class="btn-group">
-<button class="btn btn-secondary" id="btn-back-4">&#8592; Terug</button>
+<button class="btn btn-secondary" id="btn-back-3">&#8592; Terug</button>
 <button class="btn btn-primary" id="btn-submit">&#9989; Indienen</button>
 </div>
 </div>
 
-<div id="step-5" class="card hidden">
+<div id="step-4" class="card hidden">
 <div class="success-screen">
 <div class="trophy">&#127942;</div>
 <h2>Voorspelling Ingediend!</h2>
@@ -309,7 +297,6 @@ var GROEPEN = %GROEPEN_JSON%;
 var R32_STRUCTURE = %R32_STRUCTURE_JSON%;
 var currentStep = 1;
 var groupPredictions = {};
-var selectedThirds = [];
 var thirdPlaceAssignments = {};
 var knockoutSelections = {};
 
@@ -318,14 +305,13 @@ function goToStep(step) {
         var nameVal = document.getElementById('player-name').value.trim();
         if (!nameVal) { document.getElementById('name-error').classList.add('show'); return; }
     }
-    if (step === 3) { groupPredictions = getGroupResults(); buildThirdPlaces(); }
-    if (step === 4) {
-        if (selectedThirds.length !== 8) { alert('Selecteer precies 8 nummers 3!'); return; }
+    if (step === 3) {
+        groupPredictions = getGroupResults();
         buildKnockout();
     }
     document.getElementById('step-' + currentStep).classList.add('hidden');
     document.getElementById('step-' + step).classList.remove('hidden');
-    for (var i = 1; i <= 5; i++) {
+    for (var i = 1; i <= 4; i++) {
         var ind = document.getElementById('step-ind-' + i);
         ind.classList.remove('active', 'done');
         if (i < step) ind.classList.add('done');
@@ -375,7 +361,7 @@ function initMoveButtons(list) {
 function initSortable(list) {
     var dragged = null;
     list.addEventListener('dragstart', function(e) { dragged = e.target.closest('li'); if (dragged) dragged.classList.add('dragging'); });
-    list.addEventListener('dragend', function(e) { if (dragged) { dragged.classList.remove('dragging'); dragged = null; updatePositionBadges(list); } });
+    list.addEventListener('dragend', function() { if (dragged) { dragged.classList.remove('dragging'); dragged = null; updatePositionBadges(list); } });
     list.addEventListener('dragover', function(e) {
         e.preventDefault(); if (!dragged) return;
         var after = getDragAfter(list, e.clientY);
@@ -415,40 +401,6 @@ function getGroupResults() {
     return r;
 }
 
-function buildThirdPlaces() {
-    var container = document.getElementById('third-place-container');
-    container.innerHTML = '';
-    selectedThirds = [];
-    updateThirdCounter();
-    var groups = Object.keys(groupPredictions);
-    for (var g = 0; g < groups.length; g++) {
-        var group = groups[g], teams = groupPredictions[group];
-        if (!teams || teams.length < 3) continue;
-        var div = document.createElement('div');
-        div.className = 'third-place-option';
-        div.id = 'third-' + group;
-        div.textContent = teams[2] + ' (Groep ' + group + ')';
-        (function(grp) { div.addEventListener('click', function() { toggleThird(grp); }); })(group);
-        container.appendChild(div);
-    }
-}
-
-function toggleThird(group) {
-    var div = document.getElementById('third-' + group);
-    var idx = selectedThirds.indexOf(group);
-    if (idx >= 0) { selectedThirds.splice(idx, 1); div.classList.remove('selected'); }
-    else {
-        if (selectedThirds.length >= 8) { alert('Max 8!'); return; }
-        selectedThirds.push(group); div.classList.add('selected');
-    }
-    updateThirdCounter();
-}
-
-function updateThirdCounter() {
-    document.getElementById('third-counter').textContent = 'Geselecteerd: ' + selectedThirds.length + ' / 8';
-    document.getElementById('btn-to-knockout').disabled = (selectedThirds.length !== 8);
-}
-
 function buildKnockout() {
     var container = document.getElementById('knockout-container');
     container.innerHTML = '';
@@ -468,7 +420,7 @@ function buildThirdPlaceAssignment(container) {
     div.className = 'knockout-round';
     div.id = 'third-assignment';
     var html = '<h3>&#127919; Wijs Beste Derdes toe aan Wedstrijden</h3>';
-    html += '<p class="drag-hint">Voor elke wedstrijd: kies welk #3 team speelt. Elk team kan maar 1x.</p>';
+    html += '<p class="drag-hint">Voor elke wedstrijd: kies welk #3 team daadwerkelijk speelt. Elk team kan maar 1x. De 4 niet-gekozen #3 teams gaan naar huis.</p>';
     for (var i = 0; i < R32_STRUCTURE.length; i++) {
         var match = R32_STRUCTURE[i];
         if (match.slot2.type !== 'third') continue;
@@ -477,9 +429,9 @@ function buildThirdPlaceAssignment(container) {
         html += '<div style="text-align:center;margin-bottom:8px;"><strong>' + slot1Team + '</strong> vs <em>3e uit groep ' + match.slot2.allowed.join('/') + '</em></div>';
         html += '<select class="third-assign-select" data-match="' + i + '">';
         html += '<option value="">-- Kies een team --</option>';
-        for (var j = 0; j < selectedThirds.length; j++) {
-            var grp = selectedThirds[j];
-            if (match.slot2.allowed.indexOf(grp) >= 0) {
+        for (var j = 0; j < match.slot2.allowed.length; j++) {
+            var grp = match.slot2.allowed[j];
+            if (groupPredictions[grp] && groupPredictions[grp][2]) {
                 html += '<option value="' + grp + '">' + groupPredictions[grp][2] + ' (Groep ' + grp + ')</option>';
             }
         }
@@ -592,10 +544,15 @@ function submitPrediction() {
     if (!knockoutSelections.final_round || knockoutSelections.final_round[0] === undefined) {
         alert('Vul alle wedstrijden in!'); return;
     }
+    var derdes = [];
+    for (var k in thirdPlaceAssignments) {
+        var grp = thirdPlaceAssignments[k];
+        derdes.push({ groep: grp, team: groupPredictions[grp][2] });
+    }
     var data = {
         naam: name,
         groepsfase: getGroupResults(),
-        beste_derdes: selectedThirds.map(function(g) { return { groep: g, team: groupPredictions[g][2] }; }),
+        beste_derdes: derdes,
         third_assignments: thirdPlaceAssignments,
         knockout: {
             ronde_van_32: knockoutSelections.r32, ronde_van_16: knockoutSelections.r16,
@@ -609,7 +566,7 @@ function submitPrediction() {
         if (res.success) {
             document.getElementById('confirm-name').textContent = name;
             document.getElementById('confirm-champion').textContent = knockoutSelections.final_round[0];
-            goToStep(5);
+            goToStep(4);
         } else alert('Fout: ' + res.error);
     });
 }
@@ -618,8 +575,6 @@ document.getElementById('btn-next-1').addEventListener('click', function() { goT
 document.getElementById('btn-back-2').addEventListener('click', function() { goToStep(1); });
 document.getElementById('btn-next-2').addEventListener('click', function() { goToStep(3); });
 document.getElementById('btn-back-3').addEventListener('click', function() { goToStep(2); });
-document.getElementById('btn-to-knockout').addEventListener('click', function() { goToStep(4); });
-document.getElementById('btn-back-4').addEventListener('click', function() { goToStep(3); });
 document.getElementById('btn-submit').addEventListener('click', submitPrediction);
 document.getElementById('player-name').addEventListener('keypress', function(e) { if (e.key === 'Enter') goToStep(2); });
 document.getElementById('player-name').addEventListener('input', function() { document.getElementById('name-error').classList.remove('show'); });
@@ -706,7 +661,7 @@ a { color:#aaa; }
 """
 
 # ============================================================
-# ADMIN DASHBOARD - now uses same R32_STRUCTURE flow
+# ADMIN DASHBOARD
 # ============================================================
 ADMIN_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="nl"><head><meta charset="UTF-8">
@@ -742,9 +697,6 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .position-badge { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.8em; font-weight:bold; }
 .pos-1 { background:#ffd700; color:#000; } .pos-2 { background:#c0c0c0; color:#000; }
 .pos-3 { background:#cd7f32; color:#fff; } .pos-4 { background:#555; color:#fff; }
-.third-place-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:8px; margin:16px 0; }
-.third-place-option { padding:10px; border-radius:8px; text-align:center; background:rgba(255,255,255,0.05); border:2px solid rgba(255,255,255,0.1); cursor:pointer; }
-.third-place-option.selected { background:rgba(46,204,113,0.2); border-color:#2ecc71; }
 .match-card { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; margin-bottom:10px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:10px; gap:10px; }
 .match-team { flex:1; text-align:center; padding:10px; border-radius:8px; cursor:pointer; border:2px solid transparent; }
 .match-team.selected { background:rgba(46,204,113,0.2); border-color:#2ecc71; }
@@ -759,7 +711,6 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .btn-group { display:flex; gap:12px; justify-content:center; margin-top:24px; flex-wrap:wrap; }
 .hidden { display:none; }
 .drag-hint { color:#888; font-size:0.85em; margin-bottom:12px; font-style:italic; }
-.counter { color:#f0a500; font-weight:bold; margin:8px 0; }
 .status-msg { padding:12px; border-radius:8px; margin-top:12px; text-align:center; }
 .status-msg.success { background:rgba(46,204,113,0.2); border:1px solid #2ecc71; color:#2ecc71; }
 .status-msg.error { background:rgba(231,76,60,0.2); border:1px solid #e74c3c; color:#e74c3c; }
@@ -790,8 +741,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <h2>&#9989; Echte Resultaten Invullen</h2>
 <div class="step-indicator">
 <div class="step active" id="admin-step-ind-1">1. Groepsfase</div>
-<div class="step" id="admin-step-ind-2">2. Beste #3</div>
-<div class="step" id="admin-step-ind-3">3. Knock-out</div>
+<div class="step" id="admin-step-ind-2">2. Knock-out</div>
 </div>
 <div id="admin-step-1">
 <h3>Eindstand Groepsfase</h3>
@@ -799,19 +749,10 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div class="btn-group"><button class="btn btn-primary" id="admin-btn-next-1">Volgende &#8594;</button></div>
 </div>
 <div id="admin-step-2" class="hidden">
-<h3>Beste Nummers 3</h3>
-<p class="counter" id="admin-third-counter">Geselecteerd: 0 / 8</p>
-<div class="third-place-grid" id="admin-third-place-container"></div>
-<div class="btn-group">
-<button class="btn btn-secondary" id="admin-btn-back-2">&#8592; Terug</button>
-<button class="btn btn-primary" id="admin-btn-next-2" disabled>Volgende &#8594;</button>
-</div>
-</div>
-<div id="admin-step-3" class="hidden">
 <h3>Knock-out Resultaten</h3>
 <div id="admin-knockout-container"></div>
 <div class="btn-group">
-<button class="btn btn-secondary" id="admin-btn-back-3">&#8592; Terug</button>
+<button class="btn btn-secondary" id="admin-btn-back-2">&#8592; Terug</button>
 <button class="btn btn-success" id="admin-btn-save">&#128190; Opslaan</button>
 </div>
 </div>
@@ -834,7 +775,6 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 var GROEPEN = %GROEPEN_JSON%;
 var R32_STRUCTURE = %R32_STRUCTURE_JSON%;
 var adminGroupResults = {};
-var adminSelectedThirds = [];
 var adminThirdAssignments = {};
 var adminKnockoutSelections = {};
 var adminCurrentStep = 1;
@@ -849,14 +789,13 @@ document.querySelectorAll('.tab').forEach(function(t) {
 });
 
 function adminGoToStep(step) {
-    if (step === 2) { adminGroupResults = adminGetGroupResults(); adminBuildThirdPlaces(); }
-    if (step === 3) {
-        if (adminSelectedThirds.length !== 8) { alert('Selecteer 8 nummers 3!'); return; }
+    if (step === 2) {
+        adminGroupResults = adminGetGroupResults();
         adminBuildKnockout();
     }
     document.getElementById('admin-step-' + adminCurrentStep).classList.add('hidden');
     document.getElementById('admin-step-' + step).classList.remove('hidden');
-    for (var i = 1; i <= 3; i++) {
+    for (var i = 1; i <= 2; i++) {
         var ind = document.getElementById('admin-step-ind-' + i);
         ind.classList.remove('active','done');
         if (i < step) ind.classList.add('done');
@@ -945,40 +884,6 @@ function adminGetGroupResults() {
     return r;
 }
 
-function adminBuildThirdPlaces() {
-    var c = document.getElementById('admin-third-place-container');
-    c.innerHTML = '';
-    adminSelectedThirds = [];
-    adminUpdateThirdCounter();
-    var groups = Object.keys(adminGroupResults);
-    for (var g = 0; g < groups.length; g++) {
-        var group = groups[g], teams = adminGroupResults[group];
-        if (!teams || teams.length < 3) continue;
-        var div = document.createElement('div');
-        div.className = 'third-place-option';
-        div.id = 'admin-third-' + group;
-        div.textContent = teams[2] + ' (Groep ' + group + ')';
-        (function(grp) { div.addEventListener('click', function() { adminToggleThird(grp); }); })(group);
-        c.appendChild(div);
-    }
-}
-
-function adminToggleThird(group) {
-    var div = document.getElementById('admin-third-' + group);
-    var idx = adminSelectedThirds.indexOf(group);
-    if (idx >= 0) { adminSelectedThirds.splice(idx, 1); div.classList.remove('selected'); }
-    else {
-        if (adminSelectedThirds.length >= 8) { alert('Max 8!'); return; }
-        adminSelectedThirds.push(group); div.classList.add('selected');
-    }
-    adminUpdateThirdCounter();
-}
-
-function adminUpdateThirdCounter() {
-    document.getElementById('admin-third-counter').textContent = 'Geselecteerd: ' + adminSelectedThirds.length + ' / 8';
-    document.getElementById('admin-btn-next-2').disabled = (adminSelectedThirds.length !== 8);
-}
-
 function adminResolveTeam(slot) {
     if (slot.type === 'winner') return adminGroupResults[slot.group][0];
     if (slot.type === 'runnerup') return adminGroupResults[slot.group][1];
@@ -1007,9 +912,9 @@ function adminBuildThirdAssignment(container) {
         html += '<div style="text-align:center;margin-bottom:8px;"><strong>' + t1 + '</strong> vs <em>3e uit groep ' + match.slot2.allowed.join('/') + '</em></div>';
         html += '<select class="third-assign-select admin-tas" data-match="' + i + '">';
         html += '<option value="">-- Kies --</option>';
-        for (var j = 0; j < adminSelectedThirds.length; j++) {
-            var grp = adminSelectedThirds[j];
-            if (match.slot2.allowed.indexOf(grp) >= 0) {
+        for (var j = 0; j < match.slot2.allowed.length; j++) {
+            var grp = match.slot2.allowed[j];
+            if (adminGroupResults[grp] && adminGroupResults[grp][2]) {
                 html += '<option value="' + grp + '">' + adminGroupResults[grp][2] + ' (Groep ' + grp + ')</option>';
             }
         }
@@ -1121,9 +1026,14 @@ function adminSave() {
     if (!adminKnockoutSelections.final_round || adminKnockoutSelections.final_round[0] === undefined) {
         alert('Vul alle wedstrijden in!'); return;
     }
+    var derdes = [];
+    for (var k in adminThirdAssignments) {
+        var grp = adminThirdAssignments[k];
+        derdes.push({ groep: grp, team: adminGroupResults[grp][2] });
+    }
     var data = {
         groepsfase: adminGetGroupResults(),
-        beste_derdes: adminSelectedThirds.map(function(g) { return { groep: g, team: adminGroupResults[g][2] }; }),
+        beste_derdes: derdes,
         third_assignments: adminThirdAssignments,
         knockout: {
             ronde_van_32: adminKnockoutSelections.r32, ronde_van_16: adminKnockoutSelections.r16,
@@ -1175,8 +1085,6 @@ function loadAllPredictions() {
 
 document.getElementById('admin-btn-next-1').addEventListener('click', function() { adminGoToStep(2); });
 document.getElementById('admin-btn-back-2').addEventListener('click', function() { adminGoToStep(1); });
-document.getElementById('admin-btn-next-2').addEventListener('click', function() { adminGoToStep(3); });
-document.getElementById('admin-btn-back-3').addEventListener('click', function() { adminGoToStep(2); });
 document.getElementById('admin-btn-save').addEventListener('click', adminSave);
 
 adminBuildGroups();
