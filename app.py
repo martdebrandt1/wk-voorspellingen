@@ -31,10 +31,14 @@ GROEPEN = {
     "L": ["Engeland", "Kroatie", "Ghana", "Panama"],
 }
 
+# UPDATED SCORING SYSTEM
 PUNTEN = {
-    "groep_juiste_positie": 1, "groep_juiste_winnaar": 2, "groep_juiste_tweede": 1,
-    "beste_derde_juist": 2, "r32_juist": 3, "r16_juist": 5, "qf_juist": 7,
-    "sf_juist": 10, "finalist_juist": 12, "winnaar_juist": 15,
+    "groep_juiste_positie": 3,    # 3 pt per juiste positie (max 12 per groep)
+    "r32_juist": 10,              # 1/16 finale winnaar
+    "r16_juist": 20,              # 1/8 finale winnaar
+    "qf_juist": 30,               # Kwartfinale winnaar
+    "sf_juist": 50,               # Halve finale winnaar
+    "winnaar_juist": 100,         # Wereldkampioen
 }
 
 R32_STRUCTURE = [
@@ -113,66 +117,39 @@ def admin_required(f):
 
 
 def calculate_points(prediction, real_results):
-    points = {"groep_positie":0,"groep_winnaar":0,"groep_tweede":0,"beste_derdes":0,
-              "r32":0,"r16":0,"qf":0,"sf":0,"finalist":0,"winnaar":0,"totaal":0,"details":[]}
+    points = {"groep_positie":0,"r32":0,"r16":0,"qf":0,"sf":0,"winnaar":0,"totaal":0}
     if not real_results:
         return points
 
+    # Groepsfase: 3pt per juiste positie (max 12 per groep, 144 totaal)
     real_groups = real_results.get("groepsfase", {})
     pred_groups = prediction.get("groepsfase", {})
     for group in pred_groups:
         if group not in real_groups: continue
         real_order = real_groups[group]
         pred_order = pred_groups[group]
-        if len(real_order)>0 and len(pred_order)>0 and pred_order[0]==real_order[0]:
-            points["groep_winnaar"] += PUNTEN["groep_juiste_winnaar"]
-        if len(real_order)>1 and len(pred_order)>1 and pred_order[1]==real_order[1]:
-            points["groep_tweede"] += PUNTEN["groep_juiste_tweede"]
         for i, team in enumerate(pred_order):
             if i < len(real_order) and real_order[i] == team:
                 points["groep_positie"] += PUNTEN["groep_juiste_positie"]
 
-    # Beste derdes - derived from third_assignments
-    def get_third_groups(data):
-        ta = data.get("third_assignments", {})
-        if ta:
-            return set(ta.values())
-        result = set()
-        for item in data.get("beste_derdes", []):
-            if isinstance(item, dict) and item.get("groep"):
-                result.add(item["groep"])
-        return result
-
-    real_third_groups = get_third_groups(real_results)
-    pred_third_groups = get_third_groups(prediction)
-    if real_third_groups and pred_third_groups:
-        correct = len(real_third_groups & pred_third_groups)
-        points["beste_derdes"] = correct * PUNTEN["beste_derde_juist"]
-
+    # Knockout rondes
     real_ko = real_results.get("knockout", {})
     pred_ko = prediction.get("knockout", {})
-    for key, pk, pp, _ in [("ronde_van_32","r32",PUNTEN["r32_juist"],""),
-                            ("ronde_van_16","r16",PUNTEN["r16_juist"],""),
-                            ("kwartfinales","qf",PUNTEN["qf_juist"],""),
-                            ("halve_finales","sf",PUNTEN["sf_juist"],"")]:
+    for key, pk, pp in [("ronde_van_32","r32",PUNTEN["r32_juist"]),
+                         ("ronde_van_16","r16",PUNTEN["r16_juist"]),
+                         ("kwartfinales","qf",PUNTEN["qf_juist"]),
+                         ("halve_finales","sf",PUNTEN["sf_juist"])]:
         rr = real_ko.get(key, {}); pr = pred_ko.get(key, {})
         if rr and pr:
             rw = set(rr.values()) if isinstance(rr,dict) else set()
             pw = set(pr.values()) if isinstance(pr,dict) else set()
             points[pk] = len(rw & pw) * pp
 
+    # Wereldkampioen
     if real_ko.get("finale") and pred_ko.get("finale") == real_ko.get("finale"):
         points["winnaar"] = PUNTEN["winnaar_juist"]
 
-    rsf = real_ko.get("halve_finales", {})
-    psf = pred_ko.get("halve_finales", {})
-    if rsf and psf:
-        rf = set(rsf.values()) if isinstance(rsf,dict) else set()
-        pf = set(psf.values()) if isinstance(psf,dict) else set()
-        points["finalist"] = len(rf & pf) * PUNTEN["finalist_juist"]
-
-    points["totaal"] = sum(points[k] for k in ["groep_positie","groep_winnaar","groep_tweede",
-                          "beste_derdes","r32","r16","qf","sf","finalist","winnaar"])
+    points["totaal"] = sum(points[k] for k in ["groep_positie","r32","r16","qf","sf","winnaar"])
     return points
 
 
@@ -586,9 +563,9 @@ buildGroups();
 """
 
 # ============================================================
-# SCOREBOARD
+# SCOREBOARD - with clickable names
 # ============================================================
-SCOREBOARD_TEMPLATE = """<!DOCTYPE html>
+SCOREBOARD_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="nl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Scoreboard</title>
 <style>
@@ -599,36 +576,220 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .subtitle { text-align:center; color:#aaa; margin-bottom:30px; }
 .nav-links { text-align:center; margin-bottom:20px; }
 .nav-links a { color:#aaa; text-decoration:none; margin:0 10px; padding:8px 16px; border-radius:8px; background:rgba(255,255,255,0.05); }
+.nav-links a:hover { color:#fff; background:rgba(255,255,255,0.15); }
 .card { background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:24px; margin-bottom:20px; }
 .card h2 { color:#e94560; margin-bottom:16px; }
 .leaderboard { width:100%; border-collapse:collapse; }
 .leaderboard th { background:rgba(233,69,96,0.2); padding:12px 10px; text-align:center; font-size:0.8em; }
 .leaderboard td { padding:12px 10px; border-bottom:1px solid rgba(255,255,255,0.05); text-align:center; }
-.leaderboard .name { text-align:left; font-weight:bold; }
+.leaderboard tr.clickable { cursor:pointer; transition:background 0.2s; }
+.leaderboard tr.clickable:hover { background:rgba(233,69,96,0.1); }
+.leaderboard .name { text-align:left; font-weight:bold; color:#fff; }
+.leaderboard .name:hover { color:#e94560; text-decoration:underline; }
 .leaderboard .total { font-weight:bold; font-size:1.3em; color:#2ecc71; }
 .rank-1{color:#ffd700;} .rank-2{color:#c0c0c0;} .rank-3{color:#cd7f32;}
-@media (max-width:700px) { .hide-mobile { display:none; } }
+.punten-info { background:rgba(255,215,0,0.08); border:1px solid rgba(255,215,0,0.2); border-radius:12px; padding:16px; margin-bottom:20px; }
+.punten-info h3 { color:#ffd700; margin-bottom:8px; font-size:1em; }
+.punten-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:4px; }
+.punten-grid span { color:#ccc; font-size:0.85em; }
+.punten-grid strong { color:#fff; }
+
+/* Modal styles */
+.modal-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; padding:20px; overflow-y:auto; }
+.modal-overlay.active { display:block; }
+.modal-content { max-width:900px; margin:20px auto; background:linear-gradient(135deg,#1a1a2e,#16213e); border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:30px; position:relative; }
+.modal-close { position:absolute; top:15px; right:15px; width:40px; height:40px; border-radius:50%; border:none; background:rgba(233,69,96,0.2); color:#fff; font-size:1.5em; cursor:pointer; }
+.modal-close:hover { background:#e94560; }
+.modal-content h2 { color:#e94560; margin-bottom:8px; }
+.modal-content h3 { color:#f0a500; margin:20px 0 10px 0; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.1); }
+.modal-info { color:#aaa; font-size:0.9em; margin-bottom:20px; }
+.modal-info strong { color:#ffd700; }
+.modal-group-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+.modal-group { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; }
+.modal-group h4 { color:#f0a500; margin-bottom:8px; font-size:0.95em; }
+.modal-group ol { list-style:none; padding:0; counter-reset:item; }
+.modal-group ol li { padding:4px 8px; margin-bottom:3px; background:rgba(255,255,255,0.05); border-radius:4px; font-size:0.85em; counter-increment:item; }
+.modal-group ol li::before { content:counter(item) ". "; color:#888; font-weight:bold; }
+.modal-group ol li.correct { background:rgba(46,204,113,0.15); border-left:3px solid #2ecc71; }
+.modal-group ol li.wrong { background:rgba(231,76,60,0.1); border-left:3px solid rgba(231,76,60,0.5); }
+.modal-match { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; margin-bottom:6px; background:rgba(255,255,255,0.03); border-radius:6px; font-size:0.85em; }
+.modal-match .pred-team { flex:1; text-align:center; padding:4px 8px; border-radius:4px; }
+.modal-match .pred-team.winner { background:rgba(46,204,113,0.2); font-weight:bold; }
+.modal-match .pred-team.correct { background:rgba(46,204,113,0.3); color:#2ecc71; font-weight:bold; }
+.modal-match .pred-team.wrong { background:rgba(231,76,60,0.15); color:#e74c3c; }
+.modal-match .vs-small { color:#888; font-size:0.8em; padding:0 8px; }
+.legend { display:flex; gap:16px; margin-bottom:12px; flex-wrap:wrap; font-size:0.8em; color:#aaa; }
+.legend-item { display:flex; align-items:center; gap:4px; }
+.legend-dot { width:12px; height:12px; border-radius:3px; }
+@media (max-width:700px) {
+    .leaderboard { font-size:0.85em; }
+    .leaderboard th, .leaderboard td { padding:8px 4px; }
+    .hide-mobile { display:none; }
+}
 </style></head><body>
 <div class="container">
-<h1>&#127942; WK 2026 Scoreboard</h1>
-<div class="nav-links"><a href="/">Voorspelling</a><a href="/admin">Admin</a></div>
-<div class="card"><h2>Rangschikking</h2><div id="scoreboard-content">Laden...</div></div>
+<h1>&#127942; AZ St Blasius - WK 2026</h1>
+<p class="subtitle">Klik op een naam om de voorspellingen te bekijken</p>
+<div class="nav-links"><a href="/">&#9917; Voorspelling</a><a href="/admin">&#128272; Admin</a></div>
+
+<div class="punten-info">
+<h3>&#128218; Puntensysteem</h3>
+<div class="punten-grid">
+<span><strong>3pt</strong> juiste positie in groep (max 12/groep)</span>
+<span><strong>10pt</strong> 1/16 finale winnaar</span>
+<span><strong>20pt</strong> 1/8 finale winnaar</span>
+<span><strong>30pt</strong> kwartfinale winnaar</span>
+<span><strong>50pt</strong> halve finale winnaar</span>
+<span><strong>100pt</strong> wereldkampioen</span>
 </div>
+</div>
+
+<div class="card"><h2>&#128203; Rangschikking</h2><div id="scoreboard-content">Laden...</div></div>
+</div>
+
+<!-- Modal voor speler details -->
+<div class="modal-overlay" id="player-modal">
+<div class="modal-content">
+<button class="modal-close" id="modal-close">&times;</button>
+<div id="modal-body"></div>
+</div>
+</div>
+
 <script>
-fetch('/api/scoreboard').then(function(r){return r.json();}).then(function(d){
-var c = document.getElementById('scoreboard-content');
-if (!d.players || !d.players.length) { c.innerHTML = '<p>Nog geen voorspellingen.</p>'; return; }
-var h = '<table class="leaderboard"><thead><tr><th>#</th><th style="text-align:left;">Speler</th><th>Kampioen</th><th class="hide-mobile">R32</th><th class="hide-mobile">R16</th><th class="hide-mobile">KF</th><th class="hide-mobile">HF</th><th>TOTAAL</th></tr></thead><tbody>';
-for (var i=0;i<d.players.length;i++) {
-    var p = d.players[i];
-    var rc = i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'';
-    h += '<tr><td class="'+rc+'">'+(i+1)+'</td><td class="name">'+p.naam+'</td><td>'+(p.kampioen||'?')+'</td>';
-    h += '<td class="hide-mobile">'+p.points.r32+'</td><td class="hide-mobile">'+p.points.r16+'</td>';
-    h += '<td class="hide-mobile">'+p.points.qf+'</td><td class="hide-mobile">'+p.points.sf+'</td>';
-    h += '<td class="total">'+p.points.totaal+'</td></tr>';
+var allPredictions = {};
+var realResults = {};
+
+Promise.all([
+    fetch('/api/scoreboard').then(function(r){return r.json();}),
+    fetch('/api/predictions').then(function(r){return r.json();}),
+    fetch('/api/public/results').then(function(r){return r.json();})
+]).then(function(results) {
+    var d = results[0];
+    allPredictions = results[1];
+    realResults = results[2];
+    var c = document.getElementById('scoreboard-content');
+    if (!d.players || !d.players.length) { c.innerHTML = '<p>Nog geen voorspellingen.</p>'; return; }
+    var h = '<table class="leaderboard"><thead><tr><th>#</th><th style="text-align:left;">Speler</th><th>Kampioen</th><th class="hide-mobile">Groep</th><th class="hide-mobile">R32</th><th class="hide-mobile">R16</th><th class="hide-mobile">KF</th><th class="hide-mobile">HF</th><th class="hide-mobile">Win</th><th>TOTAAL</th></tr></thead><tbody>';
+    for (var i = 0; i < d.players.length; i++) {
+        var p = d.players[i];
+        var rc = i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'';
+        var medal = i===0?'&#129351;':i===1?'&#129352;':i===2?'&#129353;':(i+1);
+        h += '<tr class="clickable" data-name="' + escAttr(p.naam) + '">';
+        h += '<td class="' + rc + '">' + medal + '</td>';
+        h += '<td class="name">' + escHtml(p.naam) + '</td>';
+        h += '<td>' + (p.kampioen || '?') + '</td>';
+        h += '<td class="hide-mobile">' + p.points.groep_positie + '</td>';
+        h += '<td class="hide-mobile">' + p.points.r32 + '</td>';
+        h += '<td class="hide-mobile">' + p.points.r16 + '</td>';
+        h += '<td class="hide-mobile">' + p.points.qf + '</td>';
+        h += '<td class="hide-mobile">' + p.points.sf + '</td>';
+        h += '<td class="hide-mobile">' + p.points.winnaar + '</td>';
+        h += '<td class="total">' + p.points.totaal + '</td>';
+        h += '</tr>';
+    }
+    h += '</tbody></table>';
+    if (d.results_available) h += '<p style="text-align:center;color:#666;font-size:0.8em;margin-top:12px;">&#9989; Echte resultaten ingevuld</p>';
+    else h += '<p style="text-align:center;color:#666;font-size:0.8em;margin-top:12px;">&#9888; Nog geen echte resultaten</p>';
+    c.innerHTML = h;
+
+    // Add click handlers
+    var rows = c.querySelectorAll('tr.clickable');
+    for (var i = 0; i < rows.length; i++) {
+        rows[i].addEventListener('click', function() { showPlayer(this.getAttribute('data-name')); });
+    }
+});
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+function showPlayer(name) {
+    var pred = allPredictions[name];
+    if (!pred) return;
+    var hasReal = realResults && realResults.groepsfase && Object.keys(realResults.groepsfase).length > 0;
+    var body = document.getElementById('modal-body');
+    var html = '<h2>&#128100; ' + escHtml(name) + '</h2>';
+    html += '<p class="modal-info">Ingediend: <strong>' + (pred.datum || '?') + '</strong></p>';
+
+    if (hasReal) {
+        html += '<div class="legend">';
+        html += '<div class="legend-item"><div class="legend-dot" style="background:rgba(46,204,113,0.5);"></div> Juist</div>';
+        html += '<div class="legend-item"><div class="legend-dot" style="background:rgba(231,76,60,0.3);"></div> Fout</div>';
+        html += '</div>';
+    }
+
+    // Groepsfase
+    html += '<h3>&#128202; Groepsfase</h3>';
+    html += '<div class="modal-group-grid">';
+    var groups = Object.keys(pred.groepsfase || {}).sort();
+    for (var i = 0; i < groups.length; i++) {
+        var g = groups[i];
+        var teams = pred.groepsfase[g];
+        var realTeams = (realResults.groepsfase || {})[g] || [];
+        html += '<div class="modal-group"><h4>Groep ' + g + '</h4><ol>';
+        for (var j = 0; j < teams.length; j++) {
+            var cls = '';
+            if (hasReal && realTeams.length > j) {
+                cls = (realTeams[j] === teams[j]) ? 'correct' : 'wrong';
+            }
+            html += '<li class="' + cls + '">' + escHtml(teams[j]) + '</li>';
+        }
+        html += '</ol></div>';
+    }
+    html += '</div>';
+
+    // Knockout rondes
+    var ko = pred.knockout || {};
+    var realKo = realResults.knockout || {};
+    var rounds = [
+        { key: 'ronde_van_32', name: '&#127919; 1/16 Finales (R32)' },
+        { key: 'ronde_van_16', name: '&#127919; 1/8 Finales (R16)' },
+        { key: 'kwartfinales', name: '&#127919; Kwartfinales' },
+        { key: 'halve_finales', name: '&#127919; Halve Finales' }
+    ];
+    for (var r = 0; r < rounds.length; r++) {
+        var rd = rounds[r];
+        var winners = ko[rd.key];
+        if (!winners) continue;
+        var realWinners = realKo[rd.key] || {};
+        var realSet = {};
+        if (typeof realWinners === 'object') {
+            for (var k in realWinners) realSet[realWinners[k]] = true;
+        }
+        html += '<h3>' + rd.name + '</h3>';
+        var keys = Object.keys(winners).sort(function(a,b){return parseInt(a)-parseInt(b);});
+        for (var k = 0; k < keys.length; k++) {
+            var team = winners[keys[k]];
+            var cls = 'winner';
+            if (hasReal && Object.keys(realSet).length > 0) {
+                cls = realSet[team] ? 'correct' : 'wrong';
+            }
+            html += '<div class="modal-match"><div class="pred-team ' + cls + '">' + escHtml(team) + '</div></div>';
+        }
+    }
+
+    // Finale
+    html += '<h3>&#127942; Wereldkampioen</h3>';
+    var champion = ko.finale || '?';
+    var champCls = 'winner';
+    if (hasReal && realKo.finale) {
+        champCls = (realKo.finale === champion) ? 'correct' : 'wrong';
+    }
+    html += '<div class="modal-match"><div class="pred-team ' + champCls + '" style="font-size:1.2em;padding:10px;">' + escHtml(champion) + '</div></div>';
+
+    body.innerHTML = html;
+    document.getElementById('player-modal').classList.add('active');
+    document.body.style.overflow = 'hidden';
 }
-h += '</tbody></table>';
-c.innerHTML = h;
+
+document.getElementById('modal-close').addEventListener('click', function() {
+    document.getElementById('player-modal').classList.remove('active');
+    document.body.style.overflow = '';
+});
+document.getElementById('player-modal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        this.classList.remove('active');
+        document.body.style.overflow = '';
+    }
 });
 </script>
 </body></html>
@@ -1055,11 +1216,13 @@ function loadAdminLeaderboard() {
     fetch('/api/scoreboard').then(function(r){return r.json();}).then(function(d) {
         var c = document.getElementById('admin-leaderboard-container');
         if (!d.players || !d.players.length) { c.innerHTML = '<p>Nog geen voorspellingen.</p>'; return; }
-        var h = '<table class="leaderboard"><thead><tr><th>#</th><th style="text-align:left;">Speler</th><th>Kampioen</th><th>R32</th><th>R16</th><th>KF</th><th>HF</th><th>TOTAAL</th></tr></thead><tbody>';
+        var h = '<table class="leaderboard"><thead><tr><th>#</th><th style="text-align:left;">Speler</th><th>Kampioen</th><th>Groep</th><th>R32</th><th>R16</th><th>KF</th><th>HF</th><th>Win</th><th>TOTAAL</th></tr></thead><tbody>';
         for (var i = 0; i < d.players.length; i++) {
             var p = d.players[i];
             h += '<tr><td>'+(i+1)+'</td><td class="name">'+p.naam+'</td><td>'+(p.kampioen||'?')+'</td>';
+            h += '<td>'+p.points.groep_positie+'</td>';
             h += '<td>'+p.points.r32+'</td><td>'+p.points.r16+'</td><td>'+p.points.qf+'</td><td>'+p.points.sf+'</td>';
+            h += '<td>'+p.points.winnaar+'</td>';
             h += '<td class="total">'+p.points.totaal+'</td></tr>';
         }
         h += '</tbody></table>';
@@ -1157,6 +1320,12 @@ def submit():
 @app.route('/api/predictions', methods=['GET'])
 def get_predictions():
     return jsonify(load_data())
+
+
+@app.route('/api/public/results', methods=['GET'])
+def public_results():
+    """Publieke endpoint voor echte resultaten (read-only)"""
+    return jsonify(load_results())
 
 
 @app.route('/api/scoreboard', methods=['GET'])
