@@ -3,7 +3,7 @@
 WK 2026 Voorspellingstool - Web App (48 teams, 12 groepen)
 """
 
-from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for
+from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for, Response
 import json
 import os
 import sqlite3
@@ -71,6 +71,7 @@ R32_STRUCTURE = [
 # SEPA EPC QR-CODE
 # ============================================================
 def generate_epc_payload(name, iban, amount_eur, communication):
+    """EPC069-12 SEPA QR payload."""
     name = name[:70]
     communication = communication[:140]
     amount_str = "EUR{:.2f}".format(amount_eur)
@@ -79,6 +80,7 @@ def generate_epc_payload(name, iban, amount_eur, communication):
 
 
 def generate_qr_image_base64(payload):
+    """Genereer PNG QR-code als base64 string."""
     qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=2)
     qr.add_data(payload)
     qr.make(fit=True)
@@ -89,47 +91,57 @@ def generate_qr_image_base64(payload):
 
 
 # ============================================================
-# DATABASE
+# DATABASE (PostgreSQL op Render, SQLite lokaal)
 # ============================================================
+DATABASE_URL = os.environ.get('DATABASE_URL', '')
+USE_POSTGRES = DATABASE_URL.startswith('postgres')
+
+if USE_POSTGRES:
+    import psycopg2
+    if DATABASE_URL.startswith('postgres://'):
+        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+
+
+def get_conn():
+    if USE_POSTGRES:
+        return psycopg2.connect(DATABASE_URL)
+    else:
+        return sqlite3.connect(DB_FILE)
+
+
+def _q(sql):
+    """Convert ? placeholders to %s for PostgreSQL."""
+    return sql.replace('?', '%s') if USE_POSTGRES else sql
+
+
 def init_db():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_conn()
     c = conn.cursor()
-    c.execute("CREATE TABLE IF NOT EXISTS voorspellingen (naam TEXT PRIMARY KEY, data TEXT NOT NULL, datum TEXT NOT NULL, betaald INTEGER DEFAULT 0)")
-    c.execute("CREATE TABLE IF NOT EXISTS echte_resultaten (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL, datum TEXT NOT NULL)")
-    c.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-    try:
-        c.execute("ALTER TABLE voorspellingen ADD COLUMN betaald INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
-    # Default: inschrijvingen open
-    c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('inschrijvingen_open', '1')")
+    if USE_POSTGRES:
+        c.execute("""CREATE TABLE IF NOT EXISTS voorspellingen (
+            naam TEXT PRIMARY KEY,
+            data TEXT NOT NULL,
+            datum TEXT NOT NULL,
+            betaald INTEGER DEFAULT 0
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS echte_resultaten (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            data TEXT NOT NULL,
+            datum TEXT NOT NULL
+        )""")
+    else:
+        c.execute("CREATE TABLE IF NOT EXISTS voorspellingen (naam TEXT PRIMARY KEY, data TEXT NOT NULL, datum TEXT NOT NULL, betaald INTEGER DEFAULT 0)")
+        c.execute("CREATE TABLE IF NOT EXISTS echte_resultaten (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL, datum TEXT NOT NULL)")
+        try:
+            c.execute("ALTER TABLE voorspellingen ADD COLUMN betaald INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
     conn.commit()
     conn.close()
-
-
-def get_setting(key, default=None):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT value FROM settings WHERE key = ?", (key,))
-    row = c.fetchone()
-    conn.close()
-    return row[0] if row else default
-
-
-def set_setting(key, value):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
-    conn.commit()
-    conn.close()
-
-
-def is_inschrijvingen_open():
-    return get_setting('inschrijvingen_open', '1') == '1'
 
 
 def load_data():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_conn()
     c = conn.cursor()
     c.execute("SELECT naam, data, betaald FROM voorspellingen")
     rows = c.fetchall()
@@ -141,66 +153,70 @@ def load_data():
         result[naam] = d
     return result
 
+
 def save_prediction(naam, data):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_conn()
     c = conn.cursor()
     datum = datetime.now().strftime("%Y-%m-%d %H:%M")
     data['datum'] = datum
-    c.execute("SELECT betaald FROM voorspellingen WHERE naam = ?", (naam,))
+    c.execute(_q("SELECT betaald FROM voorspellingen WHERE naam = ?"), (naam,))
     row = c.fetchone()
     betaald = row[0] if row else 0
-    c.execute("INSERT OR REPLACE INTO voorspellingen (naam, data, datum, betaald) VALUES (?, ?, ?, ?)",
-              (naam, json.dumps(data, ensure_ascii=False), datum, betaald))
+    if USE_POSTGRES:
+        c.execute("""INSERT INTO voorspellingen (naam, data, datum, betaald)
+                     VALUES (%s, %s, %s, %s)
+                     ON CONFLICT (naam) DO UPDATE SET
+                     data = EXCLUDED.data, datum = EXCLUDED.datum""",
+                  (naam, json.dumps(data, ensure_ascii=False), datum, betaald))
+    else:
+        c.execute("INSERT OR REPLACE INTO voorspellingen (naam, data, datum, betaald) VALUES (?, ?, ?, ?)",
+                  (naam, json.dumps(data, ensure_ascii=False), datum, betaald))
     conn.commit()
     conn.close()
+
 
 def set_paid_status(naam, betaald):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_conn()
     c = conn.cursor()
-    c.execute("UPDATE voorspellingen SET betaald = ? WHERE naam = ?", (1 if betaald else 0, naam))
+    c.execute(_q("UPDATE voorspellingen SET betaald = ? WHERE naam = ?"),
+              (1 if betaald else 0, naam))
     conn.commit()
     conn.close()
+
 
 def delete_prediction(naam):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_conn()
     c = conn.cursor()
-    c.execute("DELETE FROM voorspellingen WHERE naam = ?", (naam,))
+    c.execute(_q("DELETE FROM voorspellingen WHERE naam = ?"), (naam,))
     conn.commit()
     conn.close()
 
+
 def load_results():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_conn()
     c = conn.cursor()
-    c.execute("SELECT data FROM echte_resultaten WHERE id = 1")
+    c.execute(_q("SELECT data FROM echte_resultaten WHERE id = ?"), (1,))
     row = c.fetchone()
     conn.close()
     return json.loads(row[0]) if row else {}
 
-def save_results(data):
-    """Merge nieuwe ronde-data in bestaande resultaten i.p.v. overschrijven."""
-    existing = load_results()
-    # Merge groepsfase
-    if 'groepsfase' in data:
-        existing['groepsfase'] = data['groepsfase']
-    # Merge knockout per ronde
-    if 'knockout' in data:
-        if 'knockout' not in existing:
-            existing['knockout'] = {}
-        for k, v in data['knockout'].items():
-            if v is not None and v != {} and v != "":
-                existing['knockout'][k] = v
-    # Merge overige velden (zoals third_assignments, beste_derdes, tiebreaker)
-    for key in ('third_assignments', 'beste_derdes', 'tiebreaker_doelpunten'):
-        if key in data:
-            existing[key] = data[key]
 
-    conn = sqlite3.connect(DB_FILE)
+def save_results(data):
+    conn = get_conn()
     c = conn.cursor()
     datum = datetime.now().strftime("%Y-%m-%d %H:%M")
-    c.execute("INSERT OR REPLACE INTO echte_resultaten (id, data, datum) VALUES (1, ?, ?)",
-              (json.dumps(existing, ensure_ascii=False), datum))
+    if USE_POSTGRES:
+        c.execute("""INSERT INTO echte_resultaten (id, data, datum)
+                     VALUES (1, %s, %s)
+                     ON CONFLICT (id) DO UPDATE SET
+                     data = EXCLUDED.data, datum = EXCLUDED.datum""",
+                  (json.dumps(data, ensure_ascii=False), datum))
+    else:
+        c.execute("INSERT OR REPLACE INTO echte_resultaten (id, data, datum) VALUES (1, ?, ?)",
+                  (json.dumps(data, ensure_ascii=False), datum))
     conn.commit()
     conn.close()
+
 
 def admin_required(f):
     @wraps(f)
@@ -273,7 +289,6 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 .form-group { margin-bottom:16px; }
 .form-group label { display:block; margin-bottom:6px; color:#ddd; font-size:0.95em; font-weight:500; }
 .form-group label .req { color:#e94560; margin-left:3px; }
-.form-group .helper { color:#888; font-size:0.85em; margin-top:4px; font-style:italic; }
 .name-input, .form-input, .form-select { width:100%; padding:14px 20px; font-size:1.05em; border:2px solid rgba(255,255,255,0.2); border-radius:10px; background:rgba(255,255,255,0.05); color:#fff; outline:none; }
 .form-select option { background:#1a1a2e; color:#fff; }
 .name-input:focus, .form-input:focus, .form-select:focus { border-color:#e94560; }
@@ -329,9 +344,6 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 .payment-checkbox-row.checked { border-color:#2ecc71; background:rgba(46,204,113,0.1); }
 .payment-checkbox-row input[type=checkbox] { margin-right:10px; transform:scale(1.4); accent-color:#2ecc71; }
 .payment-checkbox-row label { cursor:pointer; user-select:none; font-size:0.95em; }
-.closed-banner { background:linear-gradient(135deg,rgba(231,76,60,0.2),rgba(231,76,60,0.1)); border:2px solid #e74c3c; border-radius:16px; padding:40px 24px; text-align:center; }
-.closed-banner h2 { color:#e74c3c; font-size:2em; margin-bottom:12px; }
-.closed-banner p { color:#ddd; font-size:1.1em; margin-bottom:8px; }
 @media (max-width:600px) { .match-card { flex-direction:column; } .match-team { width:100%; } .payment-amount { font-size:2em; } }
 </style></head><body>
 <div class="container">
@@ -339,9 +351,6 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 <p class="subtitle">De wereldbeker-poule van het ziekenhuis</p>
 <div class="nav-links"><a href="/scoreboard">&#127942; Scoreboard</a><a href="/admin">&#128272; Admin</a></div>
 
-%CLOSED_BANNER%
-
-<div id="form-wrapper" class="%FORM_HIDDEN%">
 <div class="step-indicator">
 <div class="step active" id="step-ind-1">1. Wie ben je?</div>
 <div class="step" id="step-ind-2">2. Groepsfase</div>
@@ -381,14 +390,18 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 
 <div class="form-group">
 <label for="player-relation">Relatie met het ziekenhuis <span class="req">*</span></label>
-<input type="text" class="form-input" id="player-relation" placeholder="Bv. verpleegkundige spoed, arts, vriend van X, ...">
-<div class="helper">Beschrijf in je eigen woorden je band met AZ St Blasius</div>
-</div>
-
-<div class="form-group">
-<label for="player-tiebreaker">Schiftingsvraag: totaal aantal doelpunten in het WK <span class="req">*</span></label>
-<input type="number" min="0" max="500" class="form-input" id="player-tiebreaker" placeholder="Bijv. 165">
-<div class="helper">Bij gelijke stand bepaalt deze schatting de winnaar. Niet zichtbaar voor anderen.</div>
+<select class="form-select" id="player-relation">
+<option value="">-- Maak een keuze --</option>
+<option value="Medewerker">Medewerker</option>
+<option value="Arts">Arts</option>
+<option value="Verpleegkundige">Verpleegkundige</option>
+<option value="Vrijwilliger">Vrijwilliger</option>
+<option value="Stagiair">Stagiair(e)</option>
+<option value="Familie van medewerker">Familie van medewerker</option>
+<option value="Vriend(in) van medewerker">Vriend(in) van medewerker</option>
+<option value="Patient">Patiënt / Bezoeker</option>
+<option value="Andere">Andere</option>
+</select>
 </div>
 
 <p class="error-msg" id="form-error">&#9888; Vul alle velden in!</p>
@@ -480,15 +493,8 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 </div>
 </div>
 </div>
-</div>
 
 <script>
-%FORM_SCRIPT%
-</script>
-</body></html>
-"""
-
-FORM_SCRIPT = r"""
 (function() {
 "use strict";
 var GROEPEN = %GROEPEN_JSON%;
@@ -527,20 +533,14 @@ function goToStep(step) {
     if (step === 2) {
         var nameVal = document.getElementById('player-name').value.trim();
         var emailVal = document.getElementById('player-email').value.trim();
-        var relationVal = document.getElementById('player-relation').value.trim();
-        var tiebreakerVal = document.getElementById('player-tiebreaker').value.trim();
+        var relationVal = document.getElementById('player-relation').value;
         var errorEl = document.getElementById('form-error');
-        if (!nameVal || !emailVal || !relationVal || !tiebreakerVal) {
+        if (!nameVal || !emailVal || !relationVal) {
             errorEl.textContent = '\u26A0 Vul alle velden in!';
             errorEl.classList.add('show'); return;
         }
         if (!validateEmail(emailVal)) {
             errorEl.textContent = '\u26A0 Vul een geldig e-mailadres in!';
-            errorEl.classList.add('show'); return;
-        }
-        var tb = parseInt(tiebreakerVal, 10);
-        if (isNaN(tb) || tb < 0 || tb > 500) {
-            errorEl.textContent = '\u26A0 Vul een geldig aantal doelpunten in (0-500)!';
             errorEl.classList.add('show'); return;
         }
         errorEl.classList.remove('show');
@@ -830,8 +830,7 @@ document.getElementById('payment-confirm-row').addEventListener('click', functio
 function submitPrediction() {
     var name = document.getElementById('player-name').value.trim();
     var email = document.getElementById('player-email').value.trim();
-    var relation = document.getElementById('player-relation').value.trim();
-    var tiebreaker = parseInt(document.getElementById('player-tiebreaker').value, 10);
+    var relation = document.getElementById('player-relation').value;
     if (!document.getElementById('payment-confirm').checked) {
         alert('Bevestig eerst de betaling!'); return;
     }
@@ -844,7 +843,6 @@ function submitPrediction() {
         naam: name,
         email: email,
         relatie: relation,
-        tiebreaker_doelpunten: tiebreaker,
         groepsfase: getGroupResults(),
         beste_derdes: derdes,
         third_assignments: thirdPlaceAssignments,
@@ -872,16 +870,17 @@ document.getElementById('btn-back-3').addEventListener('click', function() { goT
 document.getElementById('btn-next-3').addEventListener('click', function() { goToStep(4); });
 document.getElementById('btn-back-4').addEventListener('click', function() { goToStep(3); });
 document.getElementById('btn-submit').addEventListener('click', submitPrediction);
-['player-name','player-email','player-relation','player-tiebreaker'].forEach(function(id){
+['player-name','player-email','player-relation'].forEach(function(id){
     document.getElementById(id).addEventListener('input', function() { document.getElementById('form-error').classList.remove('show'); });
 });
 
 buildGroups();
 })();
+</script>
+</body></html>
 """
-
 # ============================================================
-# SCOREBOARD (ongewijzigd)
+# SCOREBOARD
 # ============================================================
 SCOREBOARD_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="nl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -1166,6 +1165,10 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .tab.active { background:#e94560; color:#fff; }
 .tab-content { display:none; }
 .tab-content.active { display:block; }
+.step-indicator { display:flex; justify-content:center; gap:8px; margin-bottom:20px; flex-wrap:wrap; }
+.step { padding:8px 14px; border-radius:20px; background:rgba(255,255,255,0.1); font-size:0.8em; }
+.step.active { background:#e94560; font-weight:bold; }
+.step.done { background:#2ecc71; }
 .group-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:16px; margin-bottom:20px; }
 .group-card { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:16px; }
 .sortable-list { list-style:none; padding:0; }
@@ -1180,17 +1183,14 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .match-team { flex:1; text-align:center; padding:10px; border-radius:8px; cursor:pointer; border:2px solid transparent; }
 .match-team.selected { background:rgba(46,204,113,0.2); border-color:#2ecc71; }
 .match-vs { font-weight:bold; color:#e94560; font-size:0.9em; }
-.knockout-round { margin-bottom:24px; padding:16px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); border-radius:12px; }
-.knockout-round h3 { margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+.knockout-round { margin-bottom:24px; }
+.knockout-round h3 { margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1); }
 .btn { display:inline-block; padding:14px 32px; font-size:1.1em; font-weight:bold; border:none; border-radius:10px; cursor:pointer; }
 .btn-primary { background:#e94560; color:#fff; }
 .btn-success { background:#2ecc71; color:#fff; }
 .btn-secondary { background:rgba(255,255,255,0.1); color:#fff; border:1px solid rgba(255,255,255,0.2); }
 .btn-danger { background:rgba(231,76,60,0.2); color:#e74c3c; border:1px solid #e74c3c; padding:6px 12px; font-size:0.85em; }
 .btn-danger:hover { background:#e74c3c; color:#fff; }
-.btn-warning { background:rgba(243,156,18,0.2); color:#f39c12; border:1px solid #f39c12; }
-.btn-warning:hover { background:#f39c12; color:#fff; }
-.btn-small { padding:8px 16px; font-size:0.9em; }
 .btn:disabled { opacity:0.5; cursor:not-allowed; }
 .btn-group { display:flex; gap:12px; justify-content:center; margin-top:24px; flex-wrap:wrap; }
 .hidden { display:none; }
@@ -1214,27 +1214,17 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .pay-stat .lbl { color:#aaa; font-size:0.85em; margin-top:4px; }
 .pay-stat.total .num { color:#ffd700; }
 .pay-stat.collected .num { color:#3498db; }
-.pay-stat.charity .num { color:#e74c3c; }
-.pay-stat.winners .num { color:#2ecc71; }
 .participants-list { list-style:none; padding:0; }
 .participants-row { display:flex; align-items:center; gap:12px; padding:14px; margin-bottom:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:10px; }
 .participants-row .pn { flex:1; font-weight:bold; }
 .participants-row .pe { color:#aaa; font-size:0.85em; }
 .participants-row .pr { color:#3498db; font-size:0.85em; padding:4px 8px; background:rgba(52,152,219,0.15); border-radius:6px; }
 .participants-row .pd { color:#888; font-size:0.85em; }
-.participants-row .ptb { color:#f39c12; font-size:0.85em; }
 .pay-search { width:100%; padding:12px 16px; margin-bottom:16px; border:2px solid rgba(255,255,255,0.2); border-radius:10px; background:rgba(255,255,255,0.05); color:#fff; font-size:1em; outline:none; }
 .pay-search:focus { border-color:#e94560; }
 .iban-display { background:rgba(255,215,0,0.1); border:1px solid rgba(255,215,0,0.3); padding:12px; border-radius:10px; margin-bottom:16px; font-family:'Courier New',monospace; }
-.toggle-card { background:linear-gradient(135deg,rgba(243,156,18,0.1),rgba(231,76,60,0.05)); border:1px solid rgba(243,156,18,0.3); border-radius:12px; padding:20px; margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
-.toggle-card .info { flex:1; min-width:200px; }
-.toggle-card h3 { color:#f39c12; margin-bottom:4px; }
-.toggle-card p { color:#aaa; font-size:0.9em; }
-.status-open { color:#2ecc71; font-weight:bold; }
-.status-closed { color:#e74c3c; font-weight:bold; }
-.round-saved { color:#2ecc71; font-size:0.85em; font-weight:normal; }
-.round-empty { color:#888; font-size:0.85em; font-weight:normal; }
-.results-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.backup-card { background:linear-gradient(135deg,rgba(52,152,219,0.1),rgba(46,204,113,0.05)); border:1px solid rgba(52,152,219,0.3); border-radius:12px; padding:20px; margin-bottom:20px; }
+.backup-card h3 { color:#3498db; }
 @media (max-width:600px) {
     .match-card { flex-direction:column; }
     .participants-row { flex-wrap:wrap; }
@@ -1249,7 +1239,6 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div class="tab" data-tab="results-input">&#9989; Resultaten</div>
 <div class="tab" data-tab="leaderboard">&#127942; Rangschikking</div>
 <div class="tab" data-tab="all-predictions">&#128203; Voorspellingen</div>
-<div class="tab" data-tab="settings">&#9881; Instellingen</div>
 </div>
 
 <div class="tab-content active" id="tab-participants">
@@ -1262,24 +1251,34 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <input type="text" class="pay-search" id="pay-search" placeholder="&#128269; Zoek op naam, e-mail of relatie...">
 <div id="participants-container">Laden...</div>
 </div>
+
+<div class="backup-card">
+<h3>&#128190; Backup</h3>
+<p style="color:#ccc;margin-bottom:12px;">Download alle voorspellingen en resultaten als JSON-bestand. Doe dit regelmatig tijdens het toernooi voor de zekerheid!</p>
+<a href="/api/admin/backup" class="btn btn-success" style="display:inline-block;text-decoration:none;">&#128229; Download Backup</a>
+</div>
 </div>
 
 <div class="tab-content" id="tab-results-input">
 <div class="card">
-<h2>&#9989; Resultaten Invullen (per ronde opslaan)</h2>
-<p style="color:#aaa;margin-bottom:16px;">Vul de groepsfase in en klik <strong>Opslaan</strong>. Daarna kun je per ronde de winnaars selecteren en telkens opslaan voor tussenscores.</p>
-
-<div class="knockout-round">
-<h3>&#128202; Groepsfase <span id="status-groepsfase" class="round-empty">(nog niet opgeslagen)</span></h3>
+<h2>&#9989; Echte Resultaten Invullen</h2>
+<div class="step-indicator">
+<div class="step active" id="admin-step-ind-1">1. Groepsfase</div>
+<div class="step" id="admin-step-ind-2">2. Knock-out</div>
+</div>
+<div id="admin-step-1">
+<h3>Eindstand Groepsfase</h3>
 <div class="group-grid" id="admin-groups-container"></div>
-<div class="results-actions">
-<button class="btn btn-success btn-small" id="btn-save-groepsfase">&#128190; Groepsfase opslaan</button>
+<div class="btn-group"><button class="btn btn-primary" id="admin-btn-next-1">Volgende &#8594;</button></div>
 </div>
-<div class="status-msg hidden" id="status-msg-groepsfase"></div>
-</div>
-
+<div id="admin-step-2" class="hidden">
+<h3>Knock-out Resultaten</h3>
 <div id="admin-knockout-container"></div>
-
+<div class="btn-group">
+<button class="btn btn-secondary" id="admin-btn-back-2">&#8592; Terug</button>
+<button class="btn btn-success" id="admin-btn-save">&#128190; Opslaan</button>
+</div>
+</div>
 <div class="status-msg hidden" id="admin-save-status"></div>
 </div>
 </div>
@@ -1291,22 +1290,6 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div class="tab-content" id="tab-all-predictions">
 <div class="card"><h2>Alle Voorspellingen</h2><div id="all-predictions-container">Laden...</div></div>
 </div>
-
-<div class="tab-content" id="tab-settings">
-<div class="card">
-<h2>&#9881; Instellingen</h2>
-<div class="toggle-card">
-<div class="info">
-<h3>&#128274; Inschrijvingen</h3>
-<p>Status: <span id="reg-status">laden...</span></p>
-<p style="margin-top:6px;">Wanneer gesloten zien bezoekers een melding op de startpagina en kunnen ze geen nieuwe voorspelling indienen.</p>
-</div>
-<button class="btn btn-warning" id="btn-toggle-registration">Status wijzigen</button>
-</div>
-<div class="status-msg hidden" id="settings-status"></div>
-</div>
-</div>
-
 </div>
 
 <script>
@@ -1317,9 +1300,9 @@ var R32_STRUCTURE = %R32_STRUCTURE_JSON%;
 var INLEG = %INLEG%;
 var adminGroupResults = {};
 var adminThirdAssignments = {};
-var adminKnockoutSelections = { r32:{}, r16:{}, qf:{}, sf:{}, final_round:{} };
+var adminKnockoutSelections = {};
+var adminCurrentStep = 1;
 var allParticipants = [];
-var existingResults = {};
 
 document.querySelectorAll('.tab').forEach(function(t) {
     t.addEventListener('click', function() {
@@ -1330,23 +1313,28 @@ document.querySelectorAll('.tab').forEach(function(t) {
     });
 });
 
-function showStatus(elId, success, msg) {
-    var el = document.getElementById(elId);
-    el.classList.remove('hidden');
-    el.className = 'status-msg ' + (success ? 'success' : 'error');
-    el.textContent = msg;
-    setTimeout(function(){ el.classList.add('hidden'); }, 4000);
+function adminGoToStep(step) {
+    if (step === 2) {
+        adminGroupResults = adminGetGroupResults();
+        adminBuildKnockout();
+    }
+    document.getElementById('admin-step-' + adminCurrentStep).classList.add('hidden');
+    document.getElementById('admin-step-' + step).classList.remove('hidden');
+    for (var i = 1; i <= 2; i++) {
+        var ind = document.getElementById('admin-step-ind-' + i);
+        ind.classList.remove('active','done');
+        if (i < step) ind.classList.add('done');
+        if (i === step) ind.classList.add('active');
+    }
+    adminCurrentStep = step;
 }
 
-// ============ GROEPSFASE ============
 function adminBuildGroups() {
     var c = document.getElementById('admin-groups-container');
     c.innerHTML = '';
     var groups = Object.keys(GROEPEN);
-    var savedGroups = (existingResults.groepsfase) || {};
     for (var g = 0; g < groups.length; g++) {
-        var group = groups[g];
-        var teams = (savedGroups[group] && savedGroups[group].length === 4) ? savedGroups[group].slice() : GROEPEN[group].slice();
+        var group = groups[g], teams = GROEPEN[group];
         var card = document.createElement('div');
         card.className = 'group-card';
         var html = '<h3>Groep ' + group + '</h3><ul class="sortable-list" id="admin-group-' + group + '">';
@@ -1421,100 +1409,25 @@ function adminGetGroupResults() {
     return r;
 }
 
-function saveGroepsfase() {
-    adminGroupResults = adminGetGroupResults();
-    fetch('/api/admin/results', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ groepsfase: adminGroupResults })
-    }).then(function(r){return r.json();}).then(function(res) {
-        if (res.success) {
-            showStatus('status-msg-groepsfase', true, 'Groepsfase opgeslagen!');
-            document.getElementById('status-groepsfase').textContent = '(opgeslagen)';
-            document.getElementById('status-groepsfase').className = 'round-saved';
-            existingResults.groepsfase = adminGroupResults;
-            adminBuildKnockout();
-            loadAdminLeaderboard();
-        } else {
-            showStatus('status-msg-groepsfase', false, 'Fout: ' + res.error);
-        }
-    });
-}
-
-// ============ KNOCKOUT ============
 function adminResolveTeam(slot) {
-    if (!adminGroupResults[slot.group]) return 'TBD';
     if (slot.type === 'winner') return adminGroupResults[slot.group][0];
     if (slot.type === 'runnerup') return adminGroupResults[slot.group][1];
     return 'TBD';
 }
 
 function adminBuildKnockout() {
-    if (!adminGroupResults || Object.keys(adminGroupResults).length === 0) return;
     var c = document.getElementById('admin-knockout-container');
     c.innerHTML = '';
-
-    // Init from existing results
-    var savedKo = (existingResults.knockout) || {};
-    adminKnockoutSelections = {
-        r32: indexedFromObj(savedKo.ronde_van_32),
-        r16: indexedFromObj(savedKo.ronde_van_16),
-        qf:  indexedFromObj(savedKo.kwartfinales),
-        sf:  indexedFromObj(savedKo.halve_finales),
-        final_round: savedKo.finale ? {0: savedKo.finale} : {}
-    };
-    adminThirdAssignments = existingResults.third_assignments || {};
-
-    if (Object.keys(adminThirdAssignments).length === 0) {
-        adminBuildThirdAssignment(c);
-    } else {
-        adminBuildR32();
-        // Rebuild subsequent rounds if data exists
-        rebuildExistingRounds();
-    }
-}
-
-function indexedFromObj(o) {
-    if (!o) return {};
-    var r = {};
-    var keys = Object.keys(o);
-    for (var i = 0; i < keys.length; i++) r[parseInt(keys[i])] = o[keys[i]];
-    return r;
-}
-
-function rebuildExistingRounds() {
-    // After R32 is built, walk through and re-render rounds that have data
-    var order = ['r32', 'r16', 'qf', 'sf'];
-    for (var i = 0; i < order.length; i++) {
-        var rk = order[i];
-        var sel = adminKnockoutSelections[rk];
-        var counts = { r32:16, r16:8, qf:4, sf:2 };
-        // Apply selected styling
-        for (var k in sel) {
-            applySelection(rk, parseInt(k), sel[k]);
-        }
-        if (Object.keys(sel).length === counts[rk]) {
-            adminBuildNext(rk, true);
-        }
-    }
-    // Final
-    if (adminKnockoutSelections.final_round && adminKnockoutSelections.final_round[0]) {
-        applySelection('final_round', 0, adminKnockoutSelections.final_round[0]);
-    }
-}
-
-function applySelection(rk, mi, team) {
-    var el1 = document.getElementById('admin-' + rk + '-' + mi + '-1');
-    var el2 = document.getElementById('admin-' + rk + '-' + mi + '-2');
-    if (!el1 || !el2) return;
-    if (el1.getAttribute('data-team') === team) el1.classList.add('selected');
-    else if (el2.getAttribute('data-team') === team) el2.classList.add('selected');
+    adminKnockoutSelections = { r32: {}, r16: {}, qf: {}, sf: {}, final_round: {} };
+    adminThirdAssignments = {};
+    adminBuildThirdAssignment(c);
 }
 
 function adminBuildThirdAssignment(container) {
     var div = document.createElement('div');
     div.className = 'knockout-round';
     div.id = 'admin-third-assignment';
-    var html = '<h3>Wijs Beste Derdes toe</h3>';
+    var html = '<h3>Wijs Beste Derdes toe aan Wedstrijden</h3>';
     html += '<p class="drag-hint">Voor elke wedstrijd: kies welk #3 team daadwerkelijk speelt.</p>';
     for (var i = 0; i < R32_STRUCTURE.length; i++) {
         var match = R32_STRUCTURE[i];
@@ -1561,8 +1474,7 @@ function adminConfirmThirdAssignments() {
         if (!sels[i].value) { alert('Wijs alle wedstrijden toe!'); return; }
         adminThirdAssignments[parseInt(sels[i].getAttribute('data-match'))] = sels[i].value;
     }
-    var ta = document.getElementById('admin-third-assignment');
-    if (ta) ta.remove();
+    document.getElementById('admin-third-assignment').remove();
     adminBuildR32();
 }
 
@@ -1579,19 +1491,14 @@ function adminBuildR32() {
         } else { t2 = adminResolveTeam(m.slot2); }
         matches.push({ team1: t1, team2: t2 });
     }
-    adminRenderRound(c, '1/16 Finales', matches, 'r32', 'ronde_van_32');
+    adminRenderRound(c, '1/16 Finales', matches, 'r32');
 }
 
-function adminRenderRound(container, title, matches, rk, apiKey) {
-    var savedStatus = roundIsSaved(apiKey);
-    var statusClass = savedStatus ? 'round-saved' : 'round-empty';
-    var statusText = savedStatus ? '(opgeslagen)' : '(nog niet opgeslagen)';
-
+function adminRenderRound(container, title, matches, rk) {
     var div = document.createElement('div');
     div.className = 'knockout-round';
     div.id = 'admin-round-' + rk;
-    var html = '<h3><span>' + title + ' <span id="status-' + rk + '" class="' + statusClass + '">' + statusText + '</span></span>';
-    html += '<button class="btn btn-success btn-small" data-save-round="' + rk + '" data-api-key="' + apiKey + '">&#128190; Opslaan</button></h3>';
+    var html = '<h3>' + title + '</h3>';
     for (var i = 0; i < matches.length; i++) {
         var m = matches[i];
         html += '<div class="match-card">';
@@ -1600,65 +1507,13 @@ function adminRenderRound(container, title, matches, rk, apiKey) {
         html += '<div class="match-team" id="admin-' + rk + '-' + i + '-2" data-round="' + rk + '" data-match="' + i + '" data-team="' + esc(m.team2) + '">' + m.team2 + '</div>';
         html += '</div>';
     }
-    html += '<div class="status-msg hidden" id="status-msg-' + rk + '"></div>';
     div.innerHTML = html;
     container.appendChild(div);
     var tds = div.querySelectorAll('.match-team');
     for (var t = 0; t < tds.length; t++) tds[t].addEventListener('click', adminMatchClick);
-    var saveBtn = div.querySelector('[data-save-round="' + rk + '"]');
-    if (saveBtn) saveBtn.addEventListener('click', function() {
-        saveRound(rk, this.getAttribute('data-api-key'));
-    });
 }
 
-function roundIsSaved(apiKey) {
-    if (!existingResults.knockout) return false;
-    var v = existingResults.knockout[apiKey];
-    return v && (typeof v === 'string' ? v.length > 0 : Object.keys(v).length > 0);
-}
-
-function saveRound(rk, apiKey) {
-    var counts = { r32:16, r16:8, qf:4, sf:2, final_round:1 };
-    var sel = adminKnockoutSelections[rk] || {};
-    if (Object.keys(sel).length < counts[rk]) {
-        showStatus('status-msg-' + rk, false, 'Vul eerst alle wedstrijden in deze ronde in!');
-        return;
-    }
-    var payload = { knockout: {} };
-    if (rk === 'final_round') {
-        payload.knockout.finale = sel[0];
-    } else {
-        payload.knockout[apiKey] = sel;
-    }
-    // Bij R32 ook de third_assignments opslaan
-    if (rk === 'r32') {
-        payload.third_assignments = adminThirdAssignments;
-        var derdes = [];
-        for (var k in adminThirdAssignments) {
-            var grp = adminThirdAssignments[k];
-            derdes.push({ groep: grp, team: adminGroupResults[grp][2] });
-        }
-        payload.beste_derdes = derdes;
-    }
-    fetch('/api/admin/results', {
-        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
-    }).then(function(r){return r.json();}).then(function(res){
-        if (res.success) {
-            showStatus('status-msg-' + rk, true, 'Opgeslagen!');
-            var st = document.getElementById('status-' + rk);
-            if (st) { st.textContent = '(opgeslagen)'; st.className = 'round-saved'; }
-            // Update existingResults
-            if (!existingResults.knockout) existingResults.knockout = {};
-            if (rk === 'final_round') existingResults.knockout.finale = sel[0];
-            else existingResults.knockout[apiKey] = sel;
-            loadAdminLeaderboard();
-        } else {
-            showStatus('status-msg-' + rk, false, 'Fout: ' + res.error);
-        }
-    });
-}
-
-function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 function adminMatchClick(e) {
@@ -1669,39 +1524,59 @@ function adminMatchClick(e) {
     document.getElementById('admin-' + rk + '-' + mi + '-1').classList.remove('selected');
     document.getElementById('admin-' + rk + '-' + mi + '-2').classList.remove('selected');
     el.classList.add('selected');
-    if (!adminKnockoutSelections[rk]) adminKnockoutSelections[rk] = {};
     adminKnockoutSelections[rk][mi] = tn;
-    adminBuildNext(rk, false);
+    adminBuildNext(rk);
 }
 
-function adminBuildNext(rk, silent) {
+function adminBuildNext(rk) {
     var c = document.getElementById('admin-knockout-container');
     var counts = { r32: 16, r16: 8, qf: 4, sf: 2, final_round: 1 };
     var nexts = { r32: 'r16', r16: 'qf', qf: 'sf', sf: 'final_round' };
-    var apiKeys = { r16: 'ronde_van_16', qf: 'kwartfinales', sf: 'halve_finales', final_round: 'finale' };
     var names = { r32: '1/8 Finales', r16: 'Kwartfinales', qf: 'Halve Finales', sf: '&#127942; FINALE' };
     if (Object.keys(adminKnockoutSelections[rk]).length < counts[rk]) return;
     var nk = nexts[rk]; if (!nk) return;
     var order = ['r16','qf','sf','final_round'];
-    if (!silent) {
-        // Verwijder volgende rondes alleen bij user-klik (niet bij init)
-        for (var i = order.indexOf(nk); i < order.length; i++) {
-            var ex = document.getElementById('admin-round-' + order[i]);
-            if (ex) ex.remove();
-            adminKnockoutSelections[order[i]] = {};
-        }
-    } else {
-        // Bij init: alleen toevoegen als nog niet bestaat
-        if (document.getElementById('admin-round-' + nk)) return;
+    for (var i = order.indexOf(nk); i < order.length; i++) {
+        var ex = document.getElementById('admin-round-' + order[i]);
+        if (ex) ex.remove();
+        adminKnockoutSelections[order[i]] = {};
     }
     var w = [];
     for (var j = 0; j < counts[rk]; j++) w.push(adminKnockoutSelections[rk][j]);
     var nm = [];
     for (var k = 0; k < w.length; k += 2) nm.push({ team1: w[k], team2: w[k+1] });
-    adminRenderRound(c, names[nk], nm, nk, apiKeys[nk]);
+    adminRenderRound(c, names[rk], nm, nk);
 }
 
-// ============ DEELNEMERS ============
+function adminSave() {
+    if (!adminKnockoutSelections.final_round || adminKnockoutSelections.final_round[0] === undefined) {
+        alert('Vul alle wedstrijden in!'); return;
+    }
+    var derdes = [];
+    for (var k in adminThirdAssignments) {
+        var grp = adminThirdAssignments[k];
+        derdes.push({ groep: grp, team: adminGroupResults[grp][2] });
+    }
+    var data = {
+        groepsfase: adminGetGroupResults(),
+        beste_derdes: derdes,
+        third_assignments: adminThirdAssignments,
+        knockout: {
+            ronde_van_32: adminKnockoutSelections.r32, ronde_van_16: adminKnockoutSelections.r16,
+            kwartfinales: adminKnockoutSelections.qf, halve_finales: adminKnockoutSelections.sf,
+            finale: adminKnockoutSelections.final_round[0]
+        }
+    };
+    fetch('/api/admin/results', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) })
+    .then(function(r){return r.json();})
+    .then(function(res) {
+        var s = document.getElementById('admin-save-status');
+        s.classList.remove('hidden');
+        if (res.success) { s.className = 'status-msg success'; s.textContent = 'Opgeslagen!'; loadAdminLeaderboard(); }
+        else { s.className = 'status-msg error'; s.textContent = 'Fout: ' + res.error; }
+    });
+}
+
 function loadParticipants() {
     fetch('/api/admin/payments').then(function(r){return r.json();}).then(function(d) {
         allParticipants = d.players || [];
@@ -1712,15 +1587,11 @@ function loadParticipants() {
 
 function renderSummary() {
     var total = allParticipants.length;
-    var totaalPot = total * INLEG;
-    // Splitsing 50/50 - gebruik integer math zodat doel + winnaars = totaalPot exact
-    var naarDoel = Math.floor(totaalPot / 2);
-    var voorWinnaars = totaalPot - naarDoel;
     var html = '';
     html += '<div class="pay-stat total"><div class="num">' + total + '</div><div class="lbl">Deelnemers</div></div>';
-    html += '<div class="pay-stat collected"><div class="num">&euro;' + totaalPot + '</div><div class="lbl">Verwacht totaal</div></div>';
-    html += '<div class="pay-stat charity"><div class="num">&euro;' + naarDoel + '</div><div class="lbl">&#10084;&#65039; Naar goed doel (50%)</div></div>';
-    html += '<div class="pay-stat winners"><div class="num">&euro;' + voorWinnaars + '</div><div class="lbl">&#127942; Voor winnaars (50%)</div></div>';
+    html += '<div class="pay-stat collected"><div class="num">&euro;' + (total * INLEG) + '</div><div class="lbl">Verwacht totaal</div></div>';
+    html += '<div class="pay-stat collected"><div class="num">&euro;' + (total * INLEG / 2).toFixed(0) + '</div><div class="lbl">&#10084;&#65039; Naar goed doel</div></div>';
+    html += '<div class="pay-stat collected"><div class="num">&euro;' + (total * INLEG / 2).toFixed(0) + '</div><div class="lbl">&#127942; Voor winnaars</div></div>';
     document.getElementById('pay-summary').innerHTML = html;
 }
 
@@ -1735,9 +1606,6 @@ function renderParticipantsList(list) {
         h += '<div style="flex:1;min-width:200px;">';
         h += '<div class="pn">' + escAttr(p.naam) + '</div>';
         if (p.email) h += '<div class="pe">&#9993; ' + escAttr(p.email) + '</div>';
-        if (p.tiebreaker !== undefined && p.tiebreaker !== null && p.tiebreaker !== '') {
-            h += '<div class="ptb">&#9917; Schiftingsvraag (doelpunten WK): <strong>' + p.tiebreaker + '</strong></div>';
-        }
         h += '<div class="pd">Ingediend: ' + (p.datum||'?') + '</div>';
         h += '</div>';
         if (p.relatie) h += '<span class="pr">' + escAttr(p.relatie) + '</span>';
@@ -1779,12 +1647,10 @@ function loadAdminLeaderboard() {
     fetch('/api/scoreboard').then(function(r){return r.json();}).then(function(d) {
         var c = document.getElementById('admin-leaderboard-container');
         if (!d.players || !d.players.length) { c.innerHTML = '<p>Nog geen voorspellingen.</p>'; return; }
-        var h = '<table class="leaderboard"><thead><tr><th>#</th><th style="text-align:left;">Speler</th><th>Schift.</th><th>Kampioen</th><th>Groep</th><th>R32</th><th>R16</th><th>KF</th><th>HF</th><th>Win</th><th>TOTAAL</th></tr></thead><tbody>';
+        var h = '<table class="leaderboard"><thead><tr><th>#</th><th style="text-align:left;">Speler</th><th>Kampioen</th><th>Groep</th><th>R32</th><th>R16</th><th>KF</th><th>HF</th><th>Win</th><th>TOTAAL</th></tr></thead><tbody>';
         for (var i = 0; i < d.players.length; i++) {
             var p = d.players[i];
-            h += '<tr><td>'+(i+1)+'</td><td class="name">'+p.naam+'</td>';
-            h += '<td>'+(p.tiebreaker !== undefined && p.tiebreaker !== null ? p.tiebreaker : '-')+'</td>';
-            h += '<td>'+(p.kampioen||'?')+'</td>';
+            h += '<tr><td>'+(i+1)+'</td><td class="name">'+p.naam+'</td><td>'+(p.kampioen||'?')+'</td>';
             h += '<td>'+p.points.groep_positie+'</td>';
             h += '<td>'+p.points.r32+'</td><td>'+p.points.r16+'</td><td>'+p.points.qf+'</td><td>'+p.points.sf+'</td>';
             h += '<td>'+p.points.winnaar+'</td>';
@@ -1806,7 +1672,6 @@ function loadAllPredictions() {
             h += '<div class="player-detail-card"><h4>' + p.naam + '</h4>';
             if (p.email) h += '<div class="info">&#9993; ' + p.email + '</div>';
             if (p.relatie) h += '<div class="info">&#127973; ' + p.relatie + '</div>';
-            if (p.tiebreaker_doelpunten !== undefined) h += '<div class="info">&#9917; Schiftingsvraag: <strong>' + p.tiebreaker_doelpunten + '</strong> doelpunten</div>';
             h += '<div class="info">Kampioen: <strong style="color:#ffd700;">' + (p.knockout ? p.knockout.finale : '?') + '</strong></div>';
             h += '<div class="info">Ingediend: ' + (p.datum || '?') + '</div></div>';
         }
@@ -1814,57 +1679,14 @@ function loadAllPredictions() {
     });
 }
 
-// ============ INSTELLINGEN ============
-function loadSettings() {
-    fetch('/api/admin/settings').then(function(r){return r.json();}).then(function(d) {
-        var open = d.inschrijvingen_open;
-        var el = document.getElementById('reg-status');
-        var btn = document.getElementById('btn-toggle-registration');
-        if (open) {
-            el.innerHTML = '<span class="status-open">&#9989; OPEN</span> &mdash; nieuwe deelnemers kunnen zich inschrijven';
-            btn.textContent = '\uD83D\uDD12 Inschrijvingen sluiten';
-        } else {
-            el.innerHTML = '<span class="status-closed">&#128274; GESLOTEN</span> &mdash; geen nieuwe inschrijvingen mogelijk';
-            btn.textContent = '\uD83D\uDD13 Inschrijvingen openen';
-        }
-    });
-}
+document.getElementById('admin-btn-next-1').addEventListener('click', function() { adminGoToStep(2); });
+document.getElementById('admin-btn-back-2').addEventListener('click', function() { adminGoToStep(1); });
+document.getElementById('admin-btn-save').addEventListener('click', adminSave);
 
-document.getElementById('btn-toggle-registration').addEventListener('click', function() {
-    fetch('/api/admin/settings/toggle-registration', { method: 'POST' })
-    .then(function(r){return r.json();}).then(function(d){
-        if (d.success) {
-            showStatus('settings-status', true, 'Status gewijzigd!');
-            loadSettings();
-        } else {
-            showStatus('settings-status', false, 'Fout: ' + (d.error || 'onbekend'));
-        }
-    });
-});
-
-// ============ INIT ============
-document.getElementById('btn-save-groepsfase').addEventListener('click', saveGroepsfase);
-
-function init() {
-    fetch('/api/admin/results').then(function(r){return r.json();}).then(function(res) {
-        existingResults = res || {};
-        if (existingResults.groepsfase && Object.keys(existingResults.groepsfase).length > 0) {
-            adminGroupResults = existingResults.groepsfase;
-            document.getElementById('status-groepsfase').textContent = '(opgeslagen)';
-            document.getElementById('status-groepsfase').className = 'round-saved';
-        }
-        adminBuildGroups();
-        if (Object.keys(adminGroupResults).length > 0) {
-            adminBuildKnockout();
-        }
-    });
-    loadParticipants();
-    loadAdminLeaderboard();
-    loadAllPredictions();
-    loadSettings();
-}
-
-init();
+adminBuildGroups();
+loadParticipants();
+loadAdminLeaderboard();
+loadAllPredictions();
 })();
 </script>
 </body></html>
@@ -1879,27 +1701,8 @@ init();
 def index():
     groepen_json = json.dumps(GROEPEN, ensure_ascii=False)
     r32_json = json.dumps(R32_STRUCTURE, ensure_ascii=False)
-    open_status = is_inschrijvingen_open()
-
-    if open_status:
-        closed_banner = ''
-        form_hidden = ''
-        # Bouw script
-        script = FORM_SCRIPT.replace('%GROEPEN_JSON%', groepen_json)
-        script = script.replace('%R32_STRUCTURE_JSON%', r32_json)
-        script = script.replace('%IBAN%', IBAN)
-    else:
-        closed_banner = '''<div class="closed-banner">
-<h2>&#128274; Inschrijvingen gesloten</h2>
-<p>De inschrijvingen voor de WK 2026 poule zijn op dit moment <strong>gesloten</strong>.</p>
-<p>Bekijk het <a href="/scoreboard" style="color:#ffd700;">scoreboard</a> voor de huidige stand.</p>
-</div>'''
-        form_hidden = 'hidden'
-        script = '// inschrijvingen gesloten'
-
-    html = HTML_TEMPLATE.replace('%CLOSED_BANNER%', closed_banner)
-    html = html.replace('%FORM_HIDDEN%', form_hidden)
-    html = html.replace('%FORM_SCRIPT%', script)
+    html = HTML_TEMPLATE.replace('%GROEPEN_JSON%', groepen_json)
+    html = html.replace('%R32_STRUCTURE_JSON%', r32_json)
     html = html.replace('%IBAN%', IBAN)
     html = html.replace('%INLEG%', str(INLEG))
     return html
@@ -1956,8 +1759,6 @@ def api_qr():
 @app.route('/api/submit', methods=['POST'])
 def submit():
     try:
-        if not is_inschrijvingen_open():
-            return jsonify({"success": False, "error": "Inschrijvingen zijn gesloten"})
         data = request.get_json()
         naam = data.get('naam', '').strip()
         if not naam:
@@ -1971,15 +1772,7 @@ def submit():
 
 @app.route('/api/predictions', methods=['GET'])
 def get_predictions():
-    """Publiek endpoint - filter tiebreaker eruit zodat hij niet zichtbaar is op scoreboard."""
-    data = load_data()
-    public = {}
-    for naam, pred in data.items():
-        clean = dict(pred)
-        clean.pop('tiebreaker_doelpunten', None)
-        clean.pop('email', None)
-        public[naam] = clean
-    return jsonify(public)
+    return jsonify(load_data())
 
 
 @app.route('/api/public/results', methods=['GET'])
@@ -1989,20 +1782,13 @@ def public_results():
 
 @app.route('/api/scoreboard', methods=['GET'])
 def get_scoreboard():
-    """Publiek scoreboard - geen tiebreaker zichtbaar."""
     all_predictions = load_data()
     real_results = load_results()
     players = []
     for naam, pred in all_predictions.items():
         points = calculate_points(pred, real_results)
         kampioen = pred.get('knockout', {}).get('finale', '?')
-        player_data = {"naam": naam, "kampioen": kampioen, "points": points}
-        # Alleen tiebreaker tonen voor admin
-        if session.get('is_admin'):
-            player_data['tiebreaker'] = pred.get('tiebreaker_doelpunten')
-        players.append(player_data)
-
-    # Sorteer op punten, bij gelijkheid op tiebreaker (admin only — anders gewoon op punten)
+        players.append({"naam": naam, "kampioen": kampioen, "points": points})
     players.sort(key=lambda x: x["points"]["totaal"], reverse=True)
     return jsonify({
         "players": players,
@@ -2021,8 +1807,7 @@ def admin_payments():
             "email": pred.get('email', ''),
             "relatie": pred.get('relatie', ''),
             "datum": pred.get('datum', '?'),
-            "kampioen": pred.get('knockout', {}).get('finale', '?'),
-            "tiebreaker": pred.get('tiebreaker_doelpunten')
+            "kampioen": pred.get('knockout', {}).get('finale', '?')
         })
     return jsonify({"players": players})
 
@@ -2056,23 +1841,23 @@ def admin_results():
         return jsonify({"success": False, "error": str(e)})
 
 
-@app.route('/api/admin/settings', methods=['GET'])
+@app.route('/api/admin/backup', methods=['GET'])
 @admin_required
-def admin_settings_get():
-    return jsonify({
-        "inschrijvingen_open": is_inschrijvingen_open()
-    })
-
-
-@app.route('/api/admin/settings/toggle-registration', methods=['POST'])
-@admin_required
-def admin_toggle_registration():
-    try:
-        current = is_inschrijvingen_open()
-        set_setting('inschrijvingen_open', '0' if current else '1')
-        return jsonify({"success": True, "inschrijvingen_open": not current})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+def admin_backup():
+    """Download alle data als JSON backup."""
+    backup = {
+        "voorspellingen": load_data(),
+        "resultaten": load_results(),
+        "timestamp": datetime.now().isoformat(),
+        "aantal_deelnemers": len(load_data())
+    }
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M")
+    filename = "wk2026-backup-" + timestamp + ".json"
+    return Response(
+        json.dumps(backup, ensure_ascii=False, indent=2),
+        mimetype='application/json',
+        headers={'Content-Disposition': 'attachment;filename=' + filename}
+    )
 
 
 init_db()
