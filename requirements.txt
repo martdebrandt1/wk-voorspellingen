@@ -1,3 +1,3 @@
-flask>=2.0
-gunicorn>=20.0
+flask
 qrcode[pil]
+psycopg2-binary
