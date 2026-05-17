@@ -71,7 +71,6 @@ R32_STRUCTURE = [
 # SEPA EPC QR-CODE
 # ============================================================
 def generate_epc_payload(name, iban, amount_eur, communication):
-    """EPC069-12 SEPA QR payload."""
     name = name[:70]
     communication = communication[:140]
     amount_str = "EUR{:.2f}".format(amount_eur)
@@ -80,7 +79,6 @@ def generate_epc_payload(name, iban, amount_eur, communication):
 
 
 def generate_qr_image_base64(payload):
-    """Genereer PNG QR-code als base64 string."""
     qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=2)
     qr.add_data(payload)
     qr.make(fit=True)
@@ -91,7 +89,7 @@ def generate_qr_image_base64(payload):
 
 
 # ============================================================
-# DATABASE (PostgreSQL op Render, SQLite lokaal)
+# DATABASE
 # ============================================================
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 USE_POSTGRES = DATABASE_URL.startswith('postgres')
@@ -110,7 +108,6 @@ def get_conn():
 
 
 def _q(sql):
-    """Convert ? placeholders to %s for PostgreSQL."""
     return sql.replace('?', '%s') if USE_POSTGRES else sql
 
 
@@ -119,15 +116,10 @@ def init_db():
     c = conn.cursor()
     if USE_POSTGRES:
         c.execute("""CREATE TABLE IF NOT EXISTS voorspellingen (
-            naam TEXT PRIMARY KEY,
-            data TEXT NOT NULL,
-            datum TEXT NOT NULL,
-            betaald INTEGER DEFAULT 0
+            naam TEXT PRIMARY KEY, data TEXT NOT NULL, datum TEXT NOT NULL, betaald INTEGER DEFAULT 0
         )""")
         c.execute("""CREATE TABLE IF NOT EXISTS echte_resultaten (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            data TEXT NOT NULL,
-            datum TEXT NOT NULL
+            id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL, datum TEXT NOT NULL
         )""")
     else:
         c.execute("CREATE TABLE IF NOT EXISTS voorspellingen (naam TEXT PRIMARY KEY, data TEXT NOT NULL, datum TEXT NOT NULL, betaald INTEGER DEFAULT 0)")
@@ -218,6 +210,24 @@ def save_results(data):
     conn.close()
 
 
+def update_results_partial(partial_data):
+    """Update slechts een onderdeel van de resultaten (bv. enkel groepsfase, of enkel R16)."""
+    current = load_results()
+    if not current:
+        current = {}
+    # Merge top-level keys
+    for key, value in partial_data.items():
+        if key == 'knockout':
+            if 'knockout' not in current:
+                current['knockout'] = {}
+            for ko_key, ko_val in value.items():
+                current['knockout'][ko_key] = ko_val
+        else:
+            current[key] = value
+    save_results(current)
+    return current
+
+
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -228,7 +238,7 @@ def admin_required(f):
 
 
 def calculate_points(prediction, real_results):
-    points = {"groep_positie":0,"r32":0,"r16":0,"qf":0,"sf":0,"winnaar":0,"totaal":0}
+    points = {"groep_positie":0,"r32":0,"r16":0,"qf":0,"sf":0,"winnaar":0,"totaal":0,"schifting_diff":None}
     if not real_results:
         return points
     real_groups = real_results.get("groepsfase", {})
@@ -254,6 +264,14 @@ def calculate_points(prediction, real_results):
     if real_ko.get("finale") and pred_ko.get("finale") == real_ko.get("finale"):
         points["winnaar"] = PUNTEN["winnaar_juist"]
     points["totaal"] = sum(points[k] for k in ["groep_positie","r32","r16","qf","sf","winnaar"])
+    # Schiftingsvraag: hoe dicht bij het echte aantal doelpunten?
+    real_goals = real_results.get("totaal_doelpunten")
+    pred_goals = prediction.get("totaal_doelpunten")
+    if real_goals is not None and pred_goals is not None:
+        try:
+            points["schifting_diff"] = abs(int(real_goals) - int(pred_goals))
+        except (ValueError, TypeError):
+            points["schifting_diff"] = None
     return points
 
 
@@ -289,9 +307,13 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 .form-group { margin-bottom:16px; }
 .form-group label { display:block; margin-bottom:6px; color:#ddd; font-size:0.95em; font-weight:500; }
 .form-group label .req { color:#e94560; margin-left:3px; }
-.name-input, .form-input, .form-select { width:100%; padding:14px 20px; font-size:1.05em; border:2px solid rgba(255,255,255,0.2); border-radius:10px; background:rgba(255,255,255,0.05); color:#fff; outline:none; }
+.form-group .help { color:#888; font-size:0.85em; margin-top:4px; }
+.name-input, .form-input, .form-select, .form-number { width:100%; padding:14px 20px; font-size:1.05em; border:2px solid rgba(255,255,255,0.2); border-radius:10px; background:rgba(255,255,255,0.05); color:#fff; outline:none; }
 .form-select option { background:#1a1a2e; color:#fff; }
-.name-input:focus, .form-input:focus, .form-select:focus { border-color:#e94560; }
+.name-input:focus, .form-input:focus, .form-select:focus, .form-number:focus { border-color:#e94560; }
+.schifting-box { background:linear-gradient(135deg,rgba(155,89,182,0.15),rgba(52,152,219,0.08)); border:2px solid rgba(155,89,182,0.4); border-radius:12px; padding:16px; margin-top:8px; }
+.schifting-box h4 { color:#bb8fce; margin-bottom:8px; font-size:1em; }
+.schifting-box p { color:#ccc; font-size:0.85em; margin-bottom:10px; line-height:1.5; }
 .group-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:16px; margin-bottom:20px; }
 .group-card { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:16px; }
 .group-card h3 { font-size:1.1em; color:#f0a500; }
@@ -390,18 +412,17 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 
 <div class="form-group">
 <label for="player-relation">Relatie met het ziekenhuis <span class="req">*</span></label>
-<select class="form-select" id="player-relation">
-<option value="">-- Maak een keuze --</option>
-<option value="Medewerker">Medewerker</option>
-<option value="Arts">Arts</option>
-<option value="Verpleegkundige">Verpleegkundige</option>
-<option value="Vrijwilliger">Vrijwilliger</option>
-<option value="Stagiair">Stagiair(e)</option>
-<option value="Familie van medewerker">Familie van medewerker</option>
-<option value="Vriend(in) van medewerker">Vriend(in) van medewerker</option>
-<option value="Patient">Patiënt / Bezoeker</option>
-<option value="Andere">Andere</option>
-</select>
+<input type="text" class="form-input" id="player-relation" placeholder="Bijv. Verpleegkundige spoed, Stagiair, Familie van...">
+<p class="help">Vul vrij in: dienst, functie, of hoe je verbonden bent met het ziekenhuis</p>
+</div>
+
+<div class="form-group">
+<label for="player-goals">Schiftingsvraag: Hoeveel doelpunten op het hele WK? <span class="req">*</span></label>
+<div class="schifting-box">
+<h4>&#127943; Tiebreaker</h4>
+<p>Tel <strong>alle doelpunten</strong> die er gemaakt zullen worden tijdens het volledige WK 2026 (groepsfase + knock-out + finale). Bij gelijke punten op het scoreboard wint wie het dichtst bij het echte aantal zit!</p>
+<input type="number" class="form-number" id="player-goals" placeholder="Bijv. 165" min="0" max="500">
+</div>
 </div>
 
 <p class="error-msg" id="form-error">&#9888; Vul alle velden in!</p>
@@ -533,14 +554,20 @@ function goToStep(step) {
     if (step === 2) {
         var nameVal = document.getElementById('player-name').value.trim();
         var emailVal = document.getElementById('player-email').value.trim();
-        var relationVal = document.getElementById('player-relation').value;
+        var relationVal = document.getElementById('player-relation').value.trim();
+        var goalsVal = document.getElementById('player-goals').value.trim();
         var errorEl = document.getElementById('form-error');
-        if (!nameVal || !emailVal || !relationVal) {
+        if (!nameVal || !emailVal || !relationVal || !goalsVal) {
             errorEl.textContent = '\u26A0 Vul alle velden in!';
             errorEl.classList.add('show'); return;
         }
         if (!validateEmail(emailVal)) {
             errorEl.textContent = '\u26A0 Vul een geldig e-mailadres in!';
+            errorEl.classList.add('show'); return;
+        }
+        var goalsNum = parseInt(goalsVal, 10);
+        if (isNaN(goalsNum) || goalsNum < 0 || goalsNum > 500) {
+            errorEl.textContent = '\u26A0 Vul een geldig aantal doelpunten in (0-500)!';
             errorEl.classList.add('show'); return;
         }
         errorEl.classList.remove('show');
@@ -830,7 +857,8 @@ document.getElementById('payment-confirm-row').addEventListener('click', functio
 function submitPrediction() {
     var name = document.getElementById('player-name').value.trim();
     var email = document.getElementById('player-email').value.trim();
-    var relation = document.getElementById('player-relation').value;
+    var relation = document.getElementById('player-relation').value.trim();
+    var goals = parseInt(document.getElementById('player-goals').value, 10);
     if (!document.getElementById('payment-confirm').checked) {
         alert('Bevestig eerst de betaling!'); return;
     }
@@ -843,6 +871,7 @@ function submitPrediction() {
         naam: name,
         email: email,
         relatie: relation,
+        totaal_doelpunten: goals,
         groepsfase: getGroupResults(),
         beste_derdes: derdes,
         third_assignments: thirdPlaceAssignments,
@@ -870,7 +899,7 @@ document.getElementById('btn-back-3').addEventListener('click', function() { goT
 document.getElementById('btn-next-3').addEventListener('click', function() { goToStep(4); });
 document.getElementById('btn-back-4').addEventListener('click', function() { goToStep(3); });
 document.getElementById('btn-submit').addEventListener('click', submitPrediction);
-['player-name','player-email','player-relation'].forEach(function(id){
+['player-name','player-email','player-relation','player-goals'].forEach(function(id){
     document.getElementById(id).addEventListener('input', function() { document.getElementById('form-error').classList.remove('show'); });
 });
 
@@ -904,6 +933,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .leaderboard .name { text-align:left; font-weight:bold; color:#fff; }
 .leaderboard .name:hover { color:#e94560; text-decoration:underline; }
 .leaderboard .total { font-weight:bold; font-size:1.3em; color:#2ecc71; }
+.leaderboard .schifting { color:#bb8fce; font-size:0.85em; }
 .rank-1{color:#ffd700;} .rank-2{color:#c0c0c0;} .rank-3{color:#cd7f32;}
 .punten-info { background:rgba(255,215,0,0.08); border:1px solid rgba(255,215,0,0.2); border-radius:12px; padding:16px; margin-bottom:20px; }
 .punten-info h3 { color:#ffd700; margin-bottom:8px; font-size:1em; }
@@ -912,6 +942,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .punten-grid strong { color:#fff; }
 .stats-bar { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
 .stat-pill { background:rgba(46,204,113,0.15); border:1px solid rgba(46,204,113,0.3); padding:8px 14px; border-radius:20px; font-size:0.9em; }
+.stat-pill.purple { background:rgba(155,89,182,0.15); border-color:rgba(155,89,182,0.3); }
 .modal-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; padding:20px; overflow-y:auto; }
 .modal-overlay.active { display:block; }
 .modal-content { max-width:900px; margin:20px auto; background:linear-gradient(135deg,#1a1a2e,#16213e); border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:30px; position:relative; }
@@ -937,6 +968,8 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .legend { display:flex; gap:16px; margin-bottom:12px; flex-wrap:wrap; font-size:0.8em; color:#aaa; }
 .legend-item { display:flex; align-items:center; gap:4px; }
 .legend-dot { width:12px; height:12px; border-radius:3px; }
+.schifting-display { background:rgba(155,89,182,0.1); border:1px solid rgba(155,89,182,0.3); border-radius:8px; padding:10px 14px; margin:10px 0; font-size:0.9em; }
+.schifting-display strong { color:#bb8fce; }
 @media (max-width:700px) {
     .leaderboard { font-size:0.85em; }
     .leaderboard th, .leaderboard td { padding:8px 4px; }
@@ -958,6 +991,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <span><strong>50pt</strong> halve finale winnaar</span>
 <span><strong>100pt</strong> wereldkampioen</span>
 </div>
+<p style="margin-top:8px;color:#bb8fce;font-size:0.85em;">&#127943; <strong>Tiebreaker:</strong> bij gelijke punten wint wie het dichtst bij het echte aantal doelpunten op het WK zit.</p>
 </div>
 
 <div class="card">
@@ -991,10 +1025,16 @@ Promise.all([
 
     var totalPlayers = d.players ? d.players.length : 0;
     var statsHtml = '<div class="stat-pill">&#127918; ' + totalPlayers + ' deelnemer(s)</div>';
+    if (realResults && realResults.totaal_doelpunten !== undefined && realResults.totaal_doelpunten !== null) {
+        statsHtml += '<div class="stat-pill purple">&#9917; ' + realResults.totaal_doelpunten + ' doelpunten (echt)</div>';
+    }
     sb.innerHTML = statsHtml;
 
     if (!d.players || !d.players.length) { c.innerHTML = '<p>Nog geen voorspellingen.</p>'; return; }
-    var h = '<table class="leaderboard"><thead><tr><th>#</th><th style="text-align:left;">Speler</th><th>Kampioen</th><th class="hide-mobile">Groep</th><th class="hide-mobile">R32</th><th class="hide-mobile">R16</th><th class="hide-mobile">KF</th><th class="hide-mobile">HF</th><th class="hide-mobile">Win</th><th>TOTAAL</th></tr></thead><tbody>';
+    var hasGoals = realResults && realResults.totaal_doelpunten !== undefined && realResults.totaal_doelpunten !== null;
+    var h = '<table class="leaderboard"><thead><tr><th>#</th><th style="text-align:left;">Speler</th><th>Kampioen</th><th class="hide-mobile">Groep</th><th class="hide-mobile">R32</th><th class="hide-mobile">R16</th><th class="hide-mobile">KF</th><th class="hide-mobile">HF</th><th class="hide-mobile">Win</th><th>TOTAAL</th>';
+    h += '<th class="hide-mobile">Goals</th>';
+    h += '</tr></thead><tbody>';
     for (var i = 0; i < d.players.length; i++) {
         var p = d.players[i];
         var rc = i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'';
@@ -1010,6 +1050,14 @@ Promise.all([
         h += '<td class="hide-mobile">' + p.points.sf + '</td>';
         h += '<td class="hide-mobile">' + p.points.winnaar + '</td>';
         h += '<td class="total">' + p.points.totaal + '</td>';
+        var goalsCell = '-';
+        if (p.totaal_doelpunten !== undefined && p.totaal_doelpunten !== null) {
+            goalsCell = p.totaal_doelpunten;
+            if (hasGoals && p.points.schifting_diff !== null && p.points.schifting_diff !== undefined) {
+                goalsCell += ' <span class="schifting">(&Delta;' + p.points.schifting_diff + ')</span>';
+            }
+        }
+        h += '<td class="hide-mobile schifting">' + goalsCell + '</td>';
         h += '</tr>';
     }
     h += '</tbody></table>';
@@ -1033,6 +1081,15 @@ function showPlayer(name) {
     var body = document.getElementById('modal-body');
     var html = '<h2>&#128100; ' + escHtml(name) + '</h2>';
     html += '<p class="modal-info">Ingediend: <strong>' + (pred.datum || '?') + '</strong></p>';
+
+    if (pred.totaal_doelpunten !== undefined && pred.totaal_doelpunten !== null) {
+        html += '<div class="schifting-display">&#127943; <strong>Schiftingsvraag:</strong> ' + pred.totaal_doelpunten + ' doelpunten voorspeld';
+        if (realResults && realResults.totaal_doelpunten !== undefined && realResults.totaal_doelpunten !== null) {
+            var diff = Math.abs(parseInt(realResults.totaal_doelpunten,10) - parseInt(pred.totaal_doelpunten,10));
+            html += ' (echt: <strong>' + realResults.totaal_doelpunten + '</strong>, verschil: <strong>' + diff + '</strong>)';
+        }
+        html += '</div>';
+    }
 
     if (hasReal) {
         html += '<div class="legend">';
@@ -1152,7 +1209,7 @@ ADMIN_TEMPLATE = r"""<!DOCTYPE html>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:'Segoe UI',sans-serif; background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460); min-height:100vh; color:#fff; padding:20px; }
-.container { max-width:1000px; margin:0 auto; }
+.container { max-width:1100px; margin:0 auto; }
 h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .subtitle { text-align:center; color:#aaa; margin-bottom:30px; }
 .nav-links { text-align:center; margin-bottom:20px; }
@@ -1165,10 +1222,6 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .tab.active { background:#e94560; color:#fff; }
 .tab-content { display:none; }
 .tab-content.active { display:block; }
-.step-indicator { display:flex; justify-content:center; gap:8px; margin-bottom:20px; flex-wrap:wrap; }
-.step { padding:8px 14px; border-radius:20px; background:rgba(255,255,255,0.1); font-size:0.8em; }
-.step.active { background:#e94560; font-weight:bold; }
-.step.done { background:#2ecc71; }
 .group-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:16px; margin-bottom:20px; }
 .group-card { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:16px; }
 .sortable-list { list-style:none; padding:0; }
@@ -1179,18 +1232,13 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .position-badge { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.8em; font-weight:bold; }
 .pos-1 { background:#ffd700; color:#000; } .pos-2 { background:#c0c0c0; color:#000; }
 .pos-3 { background:#cd7f32; color:#fff; } .pos-4 { background:#555; color:#fff; }
-.match-card { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; margin-bottom:10px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:10px; gap:10px; }
-.match-team { flex:1; text-align:center; padding:10px; border-radius:8px; cursor:pointer; border:2px solid transparent; }
-.match-team.selected { background:rgba(46,204,113,0.2); border-color:#2ecc71; }
-.match-vs { font-weight:bold; color:#e94560; font-size:0.9em; }
-.knockout-round { margin-bottom:24px; }
-.knockout-round h3 { margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1); }
 .btn { display:inline-block; padding:14px 32px; font-size:1.1em; font-weight:bold; border:none; border-radius:10px; cursor:pointer; }
 .btn-primary { background:#e94560; color:#fff; }
 .btn-success { background:#2ecc71; color:#fff; }
 .btn-secondary { background:rgba(255,255,255,0.1); color:#fff; border:1px solid rgba(255,255,255,0.2); }
 .btn-danger { background:rgba(231,76,60,0.2); color:#e74c3c; border:1px solid #e74c3c; padding:6px 12px; font-size:0.85em; }
 .btn-danger:hover { background:#e74c3c; color:#fff; }
+.btn-small { padding:8px 16px; font-size:0.9em; text-transform:none; }
 .btn:disabled { opacity:0.5; cursor:not-allowed; }
 .btn-group { display:flex; gap:12px; justify-content:center; margin-top:24px; flex-wrap:wrap; }
 .hidden { display:none; }
@@ -1206,8 +1254,6 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .player-detail-card { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:16px; margin-bottom:12px; }
 .player-detail-card h4 { color:#e94560; margin-bottom:8px; }
 .player-detail-card .info { color:#aaa; font-size:0.85em; margin-bottom:4px; }
-.third-assign-select { width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.4); color:#fff; border:2px solid rgba(255,255,255,0.2); font-size:1em; }
-.third-assign-select option { background:#1a1a2e; color:#fff; }
 .pay-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:20px; }
 .pay-stat { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:16px; text-align:center; }
 .pay-stat .num { font-size:2em; font-weight:bold; }
@@ -1225,9 +1271,25 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .iban-display { background:rgba(255,215,0,0.1); border:1px solid rgba(255,215,0,0.3); padding:12px; border-radius:10px; margin-bottom:16px; font-family:'Courier New',monospace; }
 .backup-card { background:linear-gradient(135deg,rgba(52,152,219,0.1),rgba(46,204,113,0.05)); border:1px solid rgba(52,152,219,0.3); border-radius:12px; padding:20px; margin-bottom:20px; }
 .backup-card h3 { color:#3498db; }
+.results-section { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:20px; margin-bottom:16px; }
+.results-section h3 { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.results-section h3 .status { font-size:0.7em; padding:4px 12px; border-radius:12px; font-weight:normal; }
+.results-section h3 .status.saved { background:rgba(46,204,113,0.2); color:#2ecc71; border:1px solid #2ecc71; }
+.results-section h3 .status.empty { background:rgba(255,255,255,0.05); color:#888; border:1px solid rgba(255,255,255,0.1); }
+.team-checklist { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:8px; margin:12px 0; }
+.team-check { display:flex; align-items:center; gap:8px; padding:10px 12px; background:rgba(255,255,255,0.04); border:2px solid rgba(255,255,255,0.1); border-radius:8px; cursor:pointer; transition:all 0.15s; user-select:none; }
+.team-check:hover { background:rgba(255,255,255,0.08); }
+.team-check.checked { background:rgba(46,204,113,0.15); border-color:#2ecc71; }
+.team-check input { transform:scale(1.2); accent-color:#2ecc71; }
+.counter-badge { display:inline-block; padding:4px 12px; background:rgba(155,89,182,0.2); border:1px solid rgba(155,89,182,0.5); border-radius:12px; font-size:0.85em; color:#bb8fce; margin-left:8px; }
+.counter-badge.full { background:rgba(46,204,113,0.2); border-color:#2ecc71; color:#2ecc71; }
+.goals-input { width:200px; padding:14px; border:2px solid rgba(155,89,182,0.4); border-radius:10px; background:rgba(155,89,182,0.05); color:#fff; font-size:1.3em; text-align:center; font-weight:bold; }
+.goals-input:focus { border-color:#bb8fce; outline:none; }
+.intro-info { background:linear-gradient(135deg,rgba(52,152,219,0.1),rgba(155,89,182,0.05)); border-left:4px solid #3498db; padding:14px 18px; border-radius:8px; margin-bottom:20px; line-height:1.6; }
+.intro-info strong { color:#3498db; }
 @media (max-width:600px) {
-    .match-card { flex-direction:column; }
     .participants-row { flex-wrap:wrap; }
+    .goals-input { width:100%; }
 }
 </style></head><body>
 <div class="container">
@@ -1261,25 +1323,88 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 
 <div class="tab-content" id="tab-results-input">
 <div class="card">
-<h2>&#9989; Echte Resultaten Invullen</h2>
-<div class="step-indicator">
-<div class="step active" id="admin-step-ind-1">1. Groepsfase</div>
-<div class="step" id="admin-step-ind-2">2. Knock-out</div>
+<h2>&#9989; Echte Resultaten - Per Ronde Opslaan</h2>
+<div class="intro-info">
+<strong>&#128161; Werkwijze:</strong> Vul tussentijds resultaten in zodra een ronde is afgelopen. Elke sectie heeft een eigen <strong>"Opslaan"</strong> knop. Het scoreboard wordt direct bijgewerkt na elke save.
 </div>
-<div id="admin-step-1">
-<h3>Eindstand Groepsfase</h3>
+
+<!-- Groepsfase -->
+<div class="results-section">
+<h3>&#128202; 1. Groepsfase (eindstand) <span id="status-groepsfase" class="status empty">Niet ingevuld</span></h3>
+<p class="drag-hint">Sleep teams in de juiste eindstand per groep (1=winnaar, 2=runner-up, 3=derde, 4=laatste).</p>
 <div class="group-grid" id="admin-groups-container"></div>
-<div class="btn-group"><button class="btn btn-primary" id="admin-btn-next-1">Volgende &#8594;</button></div>
+<div class="btn-group" style="justify-content:flex-start;">
+<button class="btn btn-success btn-small" id="save-groepsfase">&#128190; Groepsfase Opslaan</button>
 </div>
-<div id="admin-step-2" class="hidden">
-<h3>Knock-out Resultaten</h3>
-<div id="admin-knockout-container"></div>
-<div class="btn-group">
-<button class="btn btn-secondary" id="admin-btn-back-2">&#8592; Terug</button>
-<button class="btn btn-success" id="admin-btn-save">&#128190; Opslaan</button>
+<div class="status-msg hidden" id="status-msg-groepsfase"></div>
 </div>
+
+<!-- R32 -->
+<div class="results-section">
+<h3>&#127919; 2. 1/16 Finales - Welke 16 teams gaan door? <span id="status-r32" class="status empty">Niet ingevuld</span> <span id="counter-r32" class="counter-badge">0/16</span></h3>
+<p class="drag-hint">Vink de 16 teams aan die de 1/8 finales bereiken.</p>
+<div id="r32-container">Vul eerst de groepsfase in &amp; sla op.</div>
+<div class="btn-group hidden" style="justify-content:flex-start;" id="save-r32-row">
+<button class="btn btn-success btn-small" id="save-r32" disabled>&#128190; R32 Opslaan</button>
 </div>
-<div class="status-msg hidden" id="admin-save-status"></div>
+<div class="status-msg hidden" id="status-msg-r32"></div>
+</div>
+
+<!-- R16 -->
+<div class="results-section">
+<h3>&#127919; 3. 1/8 Finales - Welke 8 teams gaan door? <span id="status-r16" class="status empty">Niet ingevuld</span> <span id="counter-r16" class="counter-badge">0/8</span></h3>
+<p class="drag-hint">Vink de 8 teams aan die de kwartfinales bereiken.</p>
+<div id="r16-container">Vul eerst R32 in &amp; sla op.</div>
+<div class="btn-group hidden" style="justify-content:flex-start;" id="save-r16-row">
+<button class="btn btn-success btn-small" id="save-r16" disabled>&#128190; R16 Opslaan</button>
+</div>
+<div class="status-msg hidden" id="status-msg-r16"></div>
+</div>
+
+<!-- QF -->
+<div class="results-section">
+<h3>&#127919; 4. Kwartfinales - Welke 4 teams gaan door? <span id="status-qf" class="status empty">Niet ingevuld</span> <span id="counter-qf" class="counter-badge">0/4</span></h3>
+<p class="drag-hint">Vink de 4 teams aan die de halve finales bereiken.</p>
+<div id="qf-container">Vul eerst R16 in &amp; sla op.</div>
+<div class="btn-group hidden" style="justify-content:flex-start;" id="save-qf-row">
+<button class="btn btn-success btn-small" id="save-qf" disabled>&#128190; Kwartfinales Opslaan</button>
+</div>
+<div class="status-msg hidden" id="status-msg-qf"></div>
+</div>
+
+<!-- SF -->
+<div class="results-section">
+<h3>&#127919; 5. Halve Finales - Welke 2 teams gaan door? <span id="status-sf" class="status empty">Niet ingevuld</span> <span id="counter-sf" class="counter-badge">0/2</span></h3>
+<p class="drag-hint">Vink de 2 finalisten aan.</p>
+<div id="sf-container">Vul eerst kwartfinales in &amp; sla op.</div>
+<div class="btn-group hidden" style="justify-content:flex-start;" id="save-sf-row">
+<button class="btn btn-success btn-small" id="save-sf" disabled>&#128190; Halve Finales Opslaan</button>
+</div>
+<div class="status-msg hidden" id="status-msg-sf"></div>
+</div>
+
+<!-- Finale -->
+<div class="results-section">
+<h3>&#127942; 6. Wereldkampioen <span id="status-finale" class="status empty">Niet ingevuld</span></h3>
+<p class="drag-hint">Selecteer 1 team: de wereldkampioen.</p>
+<div id="finale-container">Vul eerst halve finales in &amp; sla op.</div>
+<div class="btn-group hidden" style="justify-content:flex-start;" id="save-finale-row">
+<button class="btn btn-success btn-small" id="save-finale" disabled>&#128190; Kampioen Opslaan</button>
+</div>
+<div class="status-msg hidden" id="status-msg-finale"></div>
+</div>
+
+<!-- Doelpunten -->
+<div class="results-section">
+<h3>&#9917; 7. Schiftingsvraag - Totaal aantal doelpunten <span id="status-goals" class="status empty">Niet ingevuld</span></h3>
+<p class="drag-hint">Vul het werkelijke aantal doelpunten in dat tijdens het hele WK is gemaakt.</p>
+<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+<input type="number" class="goals-input" id="real-goals" placeholder="Bijv. 165" min="0" max="500">
+<button class="btn btn-success btn-small" id="save-goals">&#128190; Doelpunten Opslaan</button>
+</div>
+<div class="status-msg hidden" id="status-msg-goals"></div>
+</div>
+
 </div>
 </div>
 
@@ -1296,13 +1421,10 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 (function() {
 "use strict";
 var GROEPEN = %GROEPEN_JSON%;
-var R32_STRUCTURE = %R32_STRUCTURE_JSON%;
 var INLEG = %INLEG%;
-var adminGroupResults = {};
-var adminThirdAssignments = {};
-var adminKnockoutSelections = {};
-var adminCurrentStep = 1;
 var allParticipants = [];
+var currentResults = {};
+var teamSelections = { r32: {}, r16: {}, qf: {}, sf: {}, finale: {} };
 
 document.querySelectorAll('.tab').forEach(function(t) {
     t.addEventListener('click', function() {
@@ -1313,28 +1435,17 @@ document.querySelectorAll('.tab').forEach(function(t) {
     });
 });
 
-function adminGoToStep(step) {
-    if (step === 2) {
-        adminGroupResults = adminGetGroupResults();
-        adminBuildKnockout();
-    }
-    document.getElementById('admin-step-' + adminCurrentStep).classList.add('hidden');
-    document.getElementById('admin-step-' + step).classList.remove('hidden');
-    for (var i = 1; i <= 2; i++) {
-        var ind = document.getElementById('admin-step-ind-' + i);
-        ind.classList.remove('active','done');
-        if (i < step) ind.classList.add('done');
-        if (i === step) ind.classList.add('active');
-    }
-    adminCurrentStep = step;
-}
+function escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
+// ============ GROEPSFASE ============
 function adminBuildGroups() {
     var c = document.getElementById('admin-groups-container');
     c.innerHTML = '';
     var groups = Object.keys(GROEPEN);
+    var existing = currentResults.groepsfase || {};
     for (var g = 0; g < groups.length; g++) {
-        var group = groups[g], teams = GROEPEN[group];
+        var group = groups[g];
+        var teams = (existing[group] && existing[group].length === GROEPEN[group].length) ? existing[group] : GROEPEN[group];
         var card = document.createElement('div');
         card.className = 'group-card';
         var html = '<h3>Groep ' + group + '</h3><ul class="sortable-list" id="admin-group-' + group + '">';
@@ -1409,174 +1520,230 @@ function adminGetGroupResults() {
     return r;
 }
 
-function adminResolveTeam(slot) {
-    if (slot.type === 'winner') return adminGroupResults[slot.group][0];
-    if (slot.type === 'runnerup') return adminGroupResults[slot.group][1];
-    return 'TBD';
+function showStatus(elId, msg, ok) {
+    var s = document.getElementById(elId);
+    s.classList.remove('hidden');
+    s.className = 'status-msg ' + (ok ? 'success' : 'error');
+    s.textContent = msg;
+    setTimeout(function() { s.classList.add('hidden'); }, 3500);
 }
 
-function adminBuildKnockout() {
-    var c = document.getElementById('admin-knockout-container');
-    c.innerHTML = '';
-    adminKnockoutSelections = { r32: {}, r16: {}, qf: {}, sf: {}, final_round: {} };
-    adminThirdAssignments = {};
-    adminBuildThirdAssignment(c);
+function setSectionStatus(id, filled) {
+    var el = document.getElementById('status-' + id);
+    if (!el) return;
+    if (filled) { el.className = 'status saved'; el.textContent = '&#10003; Opgeslagen'.replace('&#10003;', '\u2713'); el.textContent = '\u2713 Opgeslagen'; }
+    else { el.className = 'status empty'; el.textContent = 'Niet ingevuld'; }
 }
 
-function adminBuildThirdAssignment(container) {
-    var div = document.createElement('div');
-    div.className = 'knockout-round';
-    div.id = 'admin-third-assignment';
-    var html = '<h3>Wijs Beste Derdes toe aan Wedstrijden</h3>';
-    html += '<p class="drag-hint">Voor elke wedstrijd: kies welk #3 team daadwerkelijk speelt.</p>';
-    for (var i = 0; i < R32_STRUCTURE.length; i++) {
-        var match = R32_STRUCTURE[i];
-        if (match.slot2.type !== 'third') continue;
-        var t1 = adminResolveTeam(match.slot1);
-        html += '<div class="match-card" style="flex-direction:column;align-items:stretch;">';
-        html += '<div style="text-align:center;margin-bottom:8px;"><strong>' + t1 + '</strong> vs <em>3e uit groep ' + match.slot2.allowed.join('/') + '</em></div>';
-        html += '<select class="third-assign-select admin-tas" data-match="' + i + '">';
-        html += '<option value="">-- Kies --</option>';
-        for (var j = 0; j < match.slot2.allowed.length; j++) {
-            var grp = match.slot2.allowed[j];
-            if (adminGroupResults[grp] && adminGroupResults[grp][2]) {
-                html += '<option value="' + grp + '">' + adminGroupResults[grp][2] + ' (Groep ' + grp + ')</option>';
+document.getElementById('save-groepsfase').addEventListener('click', function() {
+    var data = adminGetGroupResults();
+    fetch('/api/admin/results/partial', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ groepsfase: data })
+    }).then(function(r){return r.json();}).then(function(res) {
+        if (res.success) {
+            showStatus('status-msg-groepsfase', 'Groepsfase opgeslagen!', true);
+            currentResults = res.results || currentResults;
+            currentResults.groepsfase = data;
+            setSectionStatus('groepsfase', true);
+            renderTeamSelector('r32', 16);
+            loadAdminLeaderboard();
+        } else showStatus('status-msg-groepsfase', 'Fout: ' + res.error, false);
+    });
+});
+
+// ============ TEAM SELECTOR (R32, R16, QF, SF, FINALE) ============
+function getAvailableTeams(round) {
+    // For r32: all 32 qualifying teams (top 2 of each group + 8 best thirds)
+    // For r16: all teams selected in r32
+    // For qf: all teams selected in r16
+    // For sf: all teams selected in qf
+    // For finale: all teams selected in sf
+    if (round === 'r32') {
+        var teams = [];
+        var groups = Object.keys(GROEPEN);
+        for (var i = 0; i < groups.length; i++) {
+            var g = groups[i];
+            var stand = (currentResults.groepsfase || {})[g] || [];
+            // Add top 2 + 3rd (we present all 4 ranks 1, 2 and 3 since the admin needs to pick 16 from these)
+            // Actually for R32 we have 32 teams: 12 winners + 12 runners-up + 8 best thirds = 32
+            // So we show top 3 of each group (36 teams) en de admin vinkt de 16 aan die R32 winnen
+            // Wait - R32 BEREIKEN = alle 32 teams. We willen welke 16 doorgaan naar R16
+            for (var k = 0; k < 3 && k < stand.length; k++) {
+                if (stand[k]) teams.push({ name: stand[k], group: g, pos: k+1 });
             }
         }
-        html += '</select></div>';
+        return teams;
     }
-    html += '<div class="btn-group"><button class="btn btn-primary" id="admin-btn-confirm-thirds">Bevestig &#8594;</button></div>';
-    div.innerHTML = html;
-    container.appendChild(div);
-    var sels = div.querySelectorAll('.admin-tas');
-    for (var s = 0; s < sels.length; s++) sels[s].addEventListener('change', adminUpdateAssignOptions);
-    document.getElementById('admin-btn-confirm-thirds').addEventListener('click', adminConfirmThirdAssignments);
+    var prevMap = { r16: 'r32', qf: 'r16', sf: 'qf', finale: 'sf' };
+    var prev = prevMap[round];
+    if (!prev) return [];
+    var prevSel = (currentResults.knockout || {})['ronde_van_32'];
+    if (prev === 'r16') prevSel = (currentResults.knockout || {})['ronde_van_16'];
+    if (prev === 'qf') prevSel = (currentResults.knockout || {})['kwartfinales'];
+    if (prev === 'sf') prevSel = (currentResults.knockout || {})['halve_finales'];
+    if (!prevSel) return [];
+    var teams = [];
+    var keys = Object.keys(prevSel);
+    for (var i = 0; i < keys.length; i++) {
+        var t = prevSel[keys[i]];
+        if (t) teams.push({ name: t, group: '', pos: 0 });
+    }
+    return teams;
 }
 
-function adminUpdateAssignOptions() {
-    var sels = document.querySelectorAll('.admin-tas');
-    var used = [];
-    for (var i = 0; i < sels.length; i++) if (sels[i].value) used.push(sels[i].value);
-    for (var i = 0; i < sels.length; i++) {
-        var cur = sels[i].value;
-        var opts = sels[i].querySelectorAll('option');
-        for (var j = 0; j < opts.length; j++) {
-            if (opts[j].value === '') continue;
-            opts[j].disabled = (opts[j].value !== cur && used.indexOf(opts[j].value) >= 0);
+function renderTeamSelector(round, max) {
+    var containerId = round + '-container';
+    var counterId = 'counter-' + round;
+    var saveBtn = document.getElementById('save-' + round);
+    var saveRow = document.getElementById('save-' + round + '-row');
+    var c = document.getElementById(containerId);
+    var teams = getAvailableTeams(round);
+    if (!teams.length) {
+        c.innerHTML = '<p style="color:#888;">Vul eerst de vorige ronde in &amp; sla op.</p>';
+        if (saveRow) saveRow.classList.add('hidden');
+        return;
+    }
+    if (saveRow) saveRow.classList.remove('hidden');
+
+    // Pre-fill from currentResults
+    var preSelected = {};
+    var koMap = { r32: 'ronde_van_32', r16: 'ronde_van_16', qf: 'kwartfinales', sf: 'halve_finales', finale: 'finale' };
+    var existing = (currentResults.knockout || {})[koMap[round]];
+    if (existing) {
+        if (round === 'finale') {
+            preSelected[existing] = true;
+        } else if (typeof existing === 'object') {
+            for (var k in existing) preSelected[existing[k]] = true;
         }
     }
+    teamSelections[round] = {};
+    for (var k in preSelected) teamSelections[round][k] = true;
+
+    var html = '<div class="team-checklist">';
+    for (var i = 0; i < teams.length; i++) {
+        var t = teams[i];
+        var lbl = t.name;
+        if (t.group) lbl += ' <span style="color:#888;font-size:0.8em;">(Gr.' + t.group + ' #' + t.pos + ')</span>';
+        var checkedCls = preSelected[t.name] ? ' checked' : '';
+        var checkedAttr = preSelected[t.name] ? ' checked' : '';
+        html += '<label class="team-check' + checkedCls + '" data-team="' + escAttr(t.name) + '">';
+        html += '<input type="checkbox"' + checkedAttr + ' data-round="' + round + '" data-team="' + escAttr(t.name) + '">';
+        html += '<span>' + lbl + '</span></label>';
+    }
+    html += '</div>';
+    c.innerHTML = html;
+
+    var checks = c.querySelectorAll('input[type="checkbox"]');
+    for (var i = 0; i < checks.length; i++) {
+        checks[i].addEventListener('change', function() {
+            var team = this.getAttribute('data-team');
+            var rd = this.getAttribute('data-round');
+            var lbl = this.closest('.team-check');
+            if (this.checked) {
+                var count = Object.keys(teamSelections[rd]).length;
+                if (count >= max) {
+                    this.checked = false;
+                    alert('Je hebt al ' + max + ' teams geselecteerd!');
+                    return;
+                }
+                teamSelections[rd][team] = true;
+                lbl.classList.add('checked');
+            } else {
+                delete teamSelections[rd][team];
+                lbl.classList.remove('checked');
+            }
+            updateCounter(rd, max);
+        });
+    }
+    updateCounter(round, max);
 }
 
-function adminConfirmThirdAssignments() {
-    var sels = document.querySelectorAll('.admin-tas');
-    adminThirdAssignments = {};
-    for (var i = 0; i < sels.length; i++) {
-        if (!sels[i].value) { alert('Wijs alle wedstrijden toe!'); return; }
-        adminThirdAssignments[parseInt(sels[i].getAttribute('data-match'))] = sels[i].value;
+function updateCounter(round, max) {
+    var c = document.getElementById('counter-' + round);
+    var btn = document.getElementById('save-' + round);
+    var n = Object.keys(teamSelections[round]).length;
+    if (c) {
+        c.textContent = n + '/' + max;
+        c.className = 'counter-badge' + (n === max ? ' full' : '');
     }
-    document.getElementById('admin-third-assignment').remove();
-    adminBuildR32();
+    if (btn) btn.disabled = (n !== max);
 }
 
-function adminBuildR32() {
-    var c = document.getElementById('admin-knockout-container');
-    var matches = [];
-    for (var i = 0; i < R32_STRUCTURE.length; i++) {
-        var m = R32_STRUCTURE[i];
-        var t1 = adminResolveTeam(m.slot1);
-        var t2;
-        if (m.slot2.type === 'third') {
-            var ag = adminThirdAssignments[i];
-            t2 = ag ? adminGroupResults[ag][2] : 'TBD';
-        } else { t2 = adminResolveTeam(m.slot2); }
-        matches.push({ team1: t1, team2: t2 });
+function saveRound(round, max, koKey) {
+    var sel = Object.keys(teamSelections[round]);
+    if (sel.length !== max) {
+        alert('Selecteer exact ' + max + ' teams!');
+        return;
     }
-    adminRenderRound(c, '1/16 Finales', matches, 'r32');
-}
-
-function adminRenderRound(container, title, matches, rk) {
-    var div = document.createElement('div');
-    div.className = 'knockout-round';
-    div.id = 'admin-round-' + rk;
-    var html = '<h3>' + title + '</h3>';
-    for (var i = 0; i < matches.length; i++) {
-        var m = matches[i];
-        html += '<div class="match-card">';
-        html += '<div class="match-team" id="admin-' + rk + '-' + i + '-1" data-round="' + rk + '" data-match="' + i + '" data-team="' + esc(m.team1) + '">' + m.team1 + '</div>';
-        html += '<span class="match-vs">VS</span>';
-        html += '<div class="match-team" id="admin-' + rk + '-' + i + '-2" data-round="' + rk + '" data-match="' + i + '" data-team="' + esc(m.team2) + '">' + m.team2 + '</div>';
-        html += '</div>';
+    var koObj = {};
+    if (round === 'finale') {
+        // Send as single string
+        var payload = { knockout: {} };
+        payload.knockout[koKey] = sel[0];
+        fetch('/api/admin/results/partial', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(payload)
+        }).then(function(r){return r.json();}).then(function(res){
+            if (res.success) {
+                showStatus('status-msg-' + round, 'Wereldkampioen opgeslagen!', true);
+                if (!currentResults.knockout) currentResults.knockout = {};
+                currentResults.knockout[koKey] = sel[0];
+                setSectionStatus(round, true);
+                loadAdminLeaderboard();
+            } else showStatus('status-msg-' + round, 'Fout: ' + res.error, false);
+        });
+        return;
     }
-    div.innerHTML = html;
-    container.appendChild(div);
-    var tds = div.querySelectorAll('.match-team');
-    for (var t = 0; t < tds.length; t++) tds[t].addEventListener('click', adminMatchClick);
-}
-
-function esc(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-
-function adminMatchClick(e) {
-    var el = e.currentTarget;
-    var rk = el.getAttribute('data-round');
-    var mi = parseInt(el.getAttribute('data-match'));
-    var tn = el.getAttribute('data-team');
-    document.getElementById('admin-' + rk + '-' + mi + '-1').classList.remove('selected');
-    document.getElementById('admin-' + rk + '-' + mi + '-2').classList.remove('selected');
-    el.classList.add('selected');
-    adminKnockoutSelections[rk][mi] = tn;
-    adminBuildNext(rk);
-}
-
-function adminBuildNext(rk) {
-    var c = document.getElementById('admin-knockout-container');
-    var counts = { r32: 16, r16: 8, qf: 4, sf: 2, final_round: 1 };
-    var nexts = { r32: 'r16', r16: 'qf', qf: 'sf', sf: 'final_round' };
-    var names = { r32: '1/8 Finales', r16: 'Kwartfinales', qf: 'Halve Finales', sf: '&#127942; FINALE' };
-    if (Object.keys(adminKnockoutSelections[rk]).length < counts[rk]) return;
-    var nk = nexts[rk]; if (!nk) return;
-    var order = ['r16','qf','sf','final_round'];
-    for (var i = order.indexOf(nk); i < order.length; i++) {
-        var ex = document.getElementById('admin-round-' + order[i]);
-        if (ex) ex.remove();
-        adminKnockoutSelections[order[i]] = {};
-    }
-    var w = [];
-    for (var j = 0; j < counts[rk]; j++) w.push(adminKnockoutSelections[rk][j]);
-    var nm = [];
-    for (var k = 0; k < w.length; k += 2) nm.push({ team1: w[k], team2: w[k+1] });
-    adminRenderRound(c, names[rk], nm, nk);
-}
-
-function adminSave() {
-    if (!adminKnockoutSelections.final_round || adminKnockoutSelections.final_round[0] === undefined) {
-        alert('Vul alle wedstrijden in!'); return;
-    }
-    var derdes = [];
-    for (var k in adminThirdAssignments) {
-        var grp = adminThirdAssignments[k];
-        derdes.push({ groep: grp, team: adminGroupResults[grp][2] });
-    }
-    var data = {
-        groepsfase: adminGetGroupResults(),
-        beste_derdes: derdes,
-        third_assignments: adminThirdAssignments,
-        knockout: {
-            ronde_van_32: adminKnockoutSelections.r32, ronde_van_16: adminKnockoutSelections.r16,
-            kwartfinales: adminKnockoutSelections.qf, halve_finales: adminKnockoutSelections.sf,
-            finale: adminKnockoutSelections.final_round[0]
-        }
-    };
-    fetch('/api/admin/results', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) })
-    .then(function(r){return r.json();})
-    .then(function(res) {
-        var s = document.getElementById('admin-save-status');
-        s.classList.remove('hidden');
-        if (res.success) { s.className = 'status-msg success'; s.textContent = 'Opgeslagen!'; loadAdminLeaderboard(); }
-        else { s.className = 'status-msg error'; s.textContent = 'Fout: ' + res.error; }
+    for (var i = 0; i < sel.length; i++) koObj[i] = sel[i];
+    var payload = { knockout: {} };
+    payload.knockout[koKey] = koObj;
+    fetch('/api/admin/results/partial', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+    }).then(function(r){return r.json();}).then(function(res) {
+        if (res.success) {
+            showStatus('status-msg-' + round, round.toUpperCase() + ' opgeslagen!', true);
+            if (!currentResults.knockout) currentResults.knockout = {};
+            currentResults.knockout[koKey] = koObj;
+            setSectionStatus(round, true);
+            // Render next round selector
+            var nextMap = { r32: ['r16', 8], r16: ['qf', 4], qf: ['sf', 2], sf: ['finale', 1] };
+            if (nextMap[round]) {
+                renderTeamSelector(nextMap[round][0], nextMap[round][1]);
+            }
+            loadAdminLeaderboard();
+        } else showStatus('status-msg-' + round, 'Fout: ' + res.error, false);
     });
 }
 
+document.getElementById('save-r32').addEventListener('click', function() { saveRound('r32', 16, 'ronde_van_32'); });
+document.getElementById('save-r16').addEventListener('click', function() { saveRound('r16', 8, 'ronde_van_16'); });
+document.getElementById('save-qf').addEventListener('click', function() { saveRound('qf', 4, 'kwartfinales'); });
+document.getElementById('save-sf').addEventListener('click', function() { saveRound('sf', 2, 'halve_finales'); });
+document.getElementById('save-finale').addEventListener('click', function() { saveRound('finale', 1, 'finale'); });
+
+document.getElementById('save-goals').addEventListener('click', function() {
+    var v = document.getElementById('real-goals').value.trim();
+    var n = parseInt(v, 10);
+    if (isNaN(n) || n < 0 || n > 500) {
+        showStatus('status-msg-goals', 'Vul een geldig aantal in (0-500)!', false);
+        return;
+    }
+    fetch('/api/admin/results/partial', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ totaal_doelpunten: n })
+    }).then(function(r){return r.json();}).then(function(res){
+        if (res.success) {
+            showStatus('status-msg-goals', 'Aantal doelpunten opgeslagen!', true);
+            currentResults.totaal_doelpunten = n;
+            setSectionStatus('goals', true);
+            loadAdminLeaderboard();
+        } else showStatus('status-msg-goals', 'Fout: ' + res.error, false);
+    });
+});
+
+// ============ DEELNEMERS ============
 function loadParticipants() {
     fetch('/api/admin/payments').then(function(r){return r.json();}).then(function(d) {
         allParticipants = d.players || [];
@@ -1607,6 +1774,9 @@ function renderParticipantsList(list) {
         h += '<div class="pn">' + escAttr(p.naam) + '</div>';
         if (p.email) h += '<div class="pe">&#9993; ' + escAttr(p.email) + '</div>';
         h += '<div class="pd">Ingediend: ' + (p.datum||'?') + '</div>';
+        if (p.totaal_doelpunten !== undefined && p.totaal_doelpunten !== null) {
+            h += '<div class="pd" style="color:#bb8fce;">&#9917; Voorspelt: ' + p.totaal_doelpunten + ' doelpunten</div>';
+        }
         h += '</div>';
         if (p.relatie) h += '<span class="pr">' + escAttr(p.relatie) + '</span>';
         h += '<button class="btn btn-danger" data-delete="' + escAttr(p.naam) + '">&#128465; Verwijder</button>';
@@ -1643,18 +1813,24 @@ document.getElementById('pay-search').addEventListener('input', function() {
     renderParticipantsList(filterParticipants());
 });
 
+// ============ LEADERBOARD ============
 function loadAdminLeaderboard() {
     fetch('/api/scoreboard').then(function(r){return r.json();}).then(function(d) {
         var c = document.getElementById('admin-leaderboard-container');
         if (!d.players || !d.players.length) { c.innerHTML = '<p>Nog geen voorspellingen.</p>'; return; }
-        var h = '<table class="leaderboard"><thead><tr><th>#</th><th style="text-align:left;">Speler</th><th>Kampioen</th><th>Groep</th><th>R32</th><th>R16</th><th>KF</th><th>HF</th><th>Win</th><th>TOTAAL</th></tr></thead><tbody>';
+        var h = '<table class="leaderboard"><thead><tr><th>#</th><th style="text-align:left;">Speler</th><th>Kampioen</th><th>Groep</th><th>R32</th><th>R16</th><th>KF</th><th>HF</th><th>Win</th><th>TOTAAL</th><th>Goals (&Delta;)</th></tr></thead><tbody>';
         for (var i = 0; i < d.players.length; i++) {
             var p = d.players[i];
             h += '<tr><td>'+(i+1)+'</td><td class="name">'+p.naam+'</td><td>'+(p.kampioen||'?')+'</td>';
             h += '<td>'+p.points.groep_positie+'</td>';
             h += '<td>'+p.points.r32+'</td><td>'+p.points.r16+'</td><td>'+p.points.qf+'</td><td>'+p.points.sf+'</td>';
             h += '<td>'+p.points.winnaar+'</td>';
-            h += '<td class="total">'+p.points.totaal+'</td></tr>';
+            h += '<td class="total">'+p.points.totaal+'</td>';
+            var g = (p.totaal_doelpunten !== undefined && p.totaal_doelpunten !== null) ? p.totaal_doelpunten : '-';
+            if (p.points.schifting_diff !== null && p.points.schifting_diff !== undefined) {
+                g += ' (\u0394' + p.points.schifting_diff + ')';
+            }
+            h += '<td>'+g+'</td></tr>';
         }
         h += '</tbody></table>';
         c.innerHTML = h;
@@ -1673,17 +1849,53 @@ function loadAllPredictions() {
             if (p.email) h += '<div class="info">&#9993; ' + p.email + '</div>';
             if (p.relatie) h += '<div class="info">&#127973; ' + p.relatie + '</div>';
             h += '<div class="info">Kampioen: <strong style="color:#ffd700;">' + (p.knockout ? p.knockout.finale : '?') + '</strong></div>';
+            if (p.totaal_doelpunten !== undefined && p.totaal_doelpunten !== null) {
+                h += '<div class="info">&#9917; Voorspelt: <strong style="color:#bb8fce;">' + p.totaal_doelpunten + ' doelpunten</strong></div>';
+            }
             h += '<div class="info">Ingediend: ' + (p.datum || '?') + '</div></div>';
         }
         c.innerHTML = h;
     });
 }
 
-document.getElementById('admin-btn-next-1').addEventListener('click', function() { adminGoToStep(2); });
-document.getElementById('admin-btn-back-2').addEventListener('click', function() { adminGoToStep(1); });
-document.getElementById('admin-btn-save').addEventListener('click', adminSave);
+// ============ INIT ============
+function loadCurrentResults() {
+    fetch('/api/admin/results').then(function(r){return r.json();}).then(function(d) {
+        currentResults = d || {};
+        adminBuildGroups();
+        // Update statuses
+        if (currentResults.groepsfase && Object.keys(currentResults.groepsfase).length === 12) {
+            setSectionStatus('groepsfase', true);
+            renderTeamSelector('r32', 16);
+        }
+        var ko = currentResults.knockout || {};
+        if (ko.ronde_van_32 && Object.keys(ko.ronde_van_32).length === 16) {
+            setSectionStatus('r32', true);
+            renderTeamSelector('r16', 8);
+        }
+        if (ko.ronde_van_16 && Object.keys(ko.ronde_van_16).length === 8) {
+            setSectionStatus('r16', true);
+            renderTeamSelector('qf', 4);
+        }
+        if (ko.kwartfinales && Object.keys(ko.kwartfinales).length === 4) {
+            setSectionStatus('qf', true);
+            renderTeamSelector('sf', 2);
+        }
+        if (ko.halve_finales && Object.keys(ko.halve_finales).length === 2) {
+            setSectionStatus('sf', true);
+            renderTeamSelector('finale', 1);
+        }
+        if (ko.finale) {
+            setSectionStatus('finale', true);
+        }
+        if (currentResults.totaal_doelpunten !== undefined && currentResults.totaal_doelpunten !== null) {
+            setSectionStatus('goals', true);
+            document.getElementById('real-goals').value = currentResults.totaal_doelpunten;
+        }
+    });
+}
 
-adminBuildGroups();
+loadCurrentResults();
 loadParticipants();
 loadAdminLeaderboard();
 loadAllPredictions();
@@ -1788,8 +2000,19 @@ def get_scoreboard():
     for naam, pred in all_predictions.items():
         points = calculate_points(pred, real_results)
         kampioen = pred.get('knockout', {}).get('finale', '?')
-        players.append({"naam": naam, "kampioen": kampioen, "points": points})
-    players.sort(key=lambda x: x["points"]["totaal"], reverse=True)
+        players.append({
+            "naam": naam,
+            "kampioen": kampioen,
+            "points": points,
+            "totaal_doelpunten": pred.get('totaal_doelpunten')
+        })
+    # Sort: first by total points (desc), then by smallest schifting_diff (asc, None last)
+    def sort_key(x):
+        diff = x["points"].get("schifting_diff")
+        if diff is None:
+            diff = float('inf')
+        return (-x["points"]["totaal"], diff)
+    players.sort(key=sort_key)
     return jsonify({
         "players": players,
         "results_available": bool(real_results and real_results.get("groepsfase"))
@@ -1807,7 +2030,8 @@ def admin_payments():
             "email": pred.get('email', ''),
             "relatie": pred.get('relatie', ''),
             "datum": pred.get('datum', '?'),
-            "kampioen": pred.get('knockout', {}).get('finale', '?')
+            "kampioen": pred.get('knockout', {}).get('finale', '?'),
+            "totaal_doelpunten": pred.get('totaal_doelpunten')
         })
     return jsonify({"players": players})
 
@@ -1837,6 +2061,21 @@ def admin_results():
         data = request.get_json()
         save_results(data)
         return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route('/api/admin/results/partial', methods=['POST'])
+def admin_results_partial():
+    """Update slechts een deel van de resultaten (per ronde)."""
+    if not session.get('is_admin'):
+        return jsonify({"success": False, "error": "Niet geautoriseerd"})
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "Geen data ontvangen"})
+        updated = update_results_partial(data)
+        return jsonify({"success": True, "results": updated})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
