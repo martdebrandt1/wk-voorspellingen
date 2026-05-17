@@ -21,7 +21,7 @@ ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin2026')
 IBAN = "BE72 0358 4616 7316"
 IBAN_CLEAN = IBAN.replace(" ", "")
 BEGUNSTIGDE = "AZ St Blasius WK Poule"
-INLEG = 10  # euro
+INLEG = 5  # euro
 
 GROEPEN = {
     "A": ["Mexico", "Zuid-Afrika", "Zuid-Korea", "Tsjechië"],
@@ -224,8 +224,18 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 .card { background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:24px; margin-bottom:20px; }
 .card h2 { color:#e94560; margin-bottom:16px; }
 .card h3 { color:#f0a500; margin-bottom:12px; }
-.name-input { width:100%; padding:14px 20px; font-size:1.1em; border:2px solid rgba(255,255,255,0.2); border-radius:10px; background:rgba(255,255,255,0.05); color:#fff; outline:none; margin-bottom:10px; }
-.name-input:focus { border-color:#e94560; }
+.intro-box { background:linear-gradient(135deg,rgba(255,215,0,0.08),rgba(46,204,113,0.05)); border:1px solid rgba(255,215,0,0.2); border-radius:14px; padding:20px; margin-bottom:20px; line-height:1.7; }
+.intro-box p { margin-bottom:12px; color:#e8e8e8; }
+.intro-box p:last-child { margin-bottom:0; }
+.intro-box strong { color:#ffd700; }
+.intro-highlight { background:rgba(46,204,113,0.12); border-left:4px solid #2ecc71; padding:12px 16px; margin:16px 0; border-radius:8px; }
+.intro-highlight strong { color:#2ecc71; }
+.form-group { margin-bottom:16px; }
+.form-group label { display:block; margin-bottom:6px; color:#ddd; font-size:0.95em; font-weight:500; }
+.form-group label .req { color:#e94560; margin-left:3px; }
+.name-input, .form-input, .form-select { width:100%; padding:14px 20px; font-size:1.05em; border:2px solid rgba(255,255,255,0.2); border-radius:10px; background:rgba(255,255,255,0.05); color:#fff; outline:none; }
+.form-select option { background:#1a1a2e; color:#fff; }
+.name-input:focus, .form-input:focus, .form-select:focus { border-color:#e94560; }
 .group-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:16px; margin-bottom:20px; }
 .group-card { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:16px; }
 .group-card h3 { font-size:1.1em; color:#f0a500; }
@@ -282,11 +292,11 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 </style></head><body>
 <div class="container">
 <h1>&#9917; AZ St Blasius - WK 2026</h1>
-<p class="subtitle">Vul je voorspellingen in voor het WK 2026!</p>
+<p class="subtitle">De wereldbeker-poule van het ziekenhuis</p>
 <div class="nav-links"><a href="/scoreboard">&#127942; Scoreboard</a><a href="/admin">&#128272; Admin</a></div>
 
 <div class="step-indicator">
-<div class="step active" id="step-ind-1">1. Naam</div>
+<div class="step active" id="step-ind-1">1. Wie ben je?</div>
 <div class="step" id="step-ind-2">2. Groepsfase</div>
 <div class="step" id="step-ind-3">3. Knock-out</div>
 <div class="step" id="step-ind-4">4. Betaling</div>
@@ -294,9 +304,51 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 </div>
 
 <div id="step-1" class="card">
-<h2>&#128100; Wie ben je?</h2>
-<input type="text" class="name-input" id="player-name" placeholder="Vul je naam in..." autocomplete="off">
-<p class="error-msg" id="name-error">&#9888; Vul je naam in!</p>
+<h2>&#127947; Welkom bij de WK 2026 poule!</h2>
+
+<div class="intro-box">
+<p>&#127881; <strong>Het is weer zover!</strong> Onze 2-jaarlijkse traditie is terug: de grote AZ St Blasius voetbalpoule! Of het nu de Wereldbeker of het EK is &mdash; wij voorspellen er lustig op los.</p>
+
+<p>&#127918; <strong>Je hoeft GEEN voetbalkenner te zijn!</strong> Wie weet zit jij straks bovenaan met je &laquo;buikgevoel-tactiek&raquo;. We hebben in het verleden al gezien dat de stagiaire die nog nooit een match gezien heeft, de kenners om de oren slaat. &#128514;</p>
+
+<p>&#129309; <strong>Meedoen is belangrijker dan winnen.</strong> Het draait om de plezier, de discussies aan de koffieautomaat en het samen leven met onze favorieten op het veld.</p>
+
+<div class="intro-highlight">
+&#10084;&#65039; <strong>De helft van de inleg gaat naar het goede doel.</strong> De andere helft wordt verdeeld over de top-voorspellers. Win-win voor iedereen!
+</div>
+
+<p>&#9917; Klaar? Vul hieronder je gegevens in en laat de voorspellingen beginnen!</p>
+</div>
+
+<h3 style="margin-top:24px;">&#128100; Vertel ons wie je bent</h3>
+
+<div class="form-group">
+<label for="player-name">Naam <span class="req">*</span></label>
+<input type="text" class="name-input" id="player-name" placeholder="Voornaam Achternaam" autocomplete="name">
+</div>
+
+<div class="form-group">
+<label for="player-email">E-mailadres <span class="req">*</span></label>
+<input type="email" class="form-input" id="player-email" placeholder="jouw.naam@azsintblasius.be" autocomplete="email">
+</div>
+
+<div class="form-group">
+<label for="player-relation">Relatie met het ziekenhuis <span class="req">*</span></label>
+<select class="form-select" id="player-relation">
+<option value="">-- Maak een keuze --</option>
+<option value="Medewerker">Medewerker</option>
+<option value="Arts">Arts</option>
+<option value="Verpleegkundige">Verpleegkundige</option>
+<option value="Vrijwilliger">Vrijwilliger</option>
+<option value="Stagiair">Stagiair(e)</option>
+<option value="Familie van medewerker">Familie van medewerker</option>
+<option value="Vriend(in) van medewerker">Vriend(in) van medewerker</option>
+<option value="Patient">Patiënt / Bezoeker</option>
+<option value="Andere">Andere</option>
+</select>
+</div>
+
+<p class="error-msg" id="form-error">&#9888; Vul alle velden in!</p>
 <div class="btn-group"><button class="btn btn-primary" id="btn-next-1">Volgende &#8594;</button></div>
 </div>
 
@@ -323,7 +375,6 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 <div class="payment-card">
 <div class="payment-icon">&#128241;</div>
 <h2 style="color:#ffd700;border:none;">Scan & Betaal</h2>
-<p style="color:#ddd;margin-bottom:8px;">Inleg poule</p>
 <div class="payment-amount">&euro;%INLEG%</div>
 <div id="qr-container" style="background:rgba(255,255,255,0.1);padding:30px;border-radius:16px;min-height:280px;display:flex;align-items:center;justify-content:center;color:#aaa;margin:16px 0;">
 &#9203; QR-code wordt gegenereerd...
@@ -362,13 +413,9 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 <div class="payment-checkbox-row" id="payment-confirm-row">
 <label style="display:flex;align-items:center;">
 <input type="checkbox" id="payment-confirm">
-<span>Ik heb de betaling uitgevoerd (of doe dit zo direct)</span>
+<span>Ik heb de betaling uitgevoerd</span>
 </label>
 </div>
-
-<p style="text-align:center;color:#aaa;font-size:0.9em;margin-top:16px;">
-&#8505; Je voorspelling wordt opgeslagen, maar verschijnt pas op het scoreboard nadat de betaling bevestigd is door de admin.
-</p>
 
 <div class="btn-group">
 <button class="btn btn-secondary" id="btn-back-4">&#8592; Terug</button>
@@ -382,7 +429,7 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 <h2>Voorspelling Ingediend!</h2>
 <p>Bedankt <strong id="confirm-name"></strong>!</p>
 <p class="champion-name">Jouw kampioen: <span id="confirm-champion"></span></p>
-<p style="color:#aaa;margin:20px 0;">&#8505; Je voorspelling verschijnt op het scoreboard zodra de admin je betaling bevestigt.</p>
+<p style="color:#aaa;margin:20px 0;">Veel succes! Hou het scoreboard in de gaten tijdens het toernooi. &#9917;</p>
 <div class="btn-group">
 <button class="btn btn-secondary" onclick="location.reload()">Nieuwe Voorspelling</button>
 <button class="btn btn-primary" onclick="window.location.href='/scoreboard'">Scoreboard</button>
@@ -422,10 +469,25 @@ function loadQRCode(name) {
     });
 }
 
+function validateEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 function goToStep(step) {
     if (step === 2) {
         var nameVal = document.getElementById('player-name').value.trim();
-        if (!nameVal) { document.getElementById('name-error').classList.add('show'); return; }
+        var emailVal = document.getElementById('player-email').value.trim();
+        var relationVal = document.getElementById('player-relation').value;
+        var errorEl = document.getElementById('form-error');
+        if (!nameVal || !emailVal || !relationVal) {
+            errorEl.textContent = '\u26A0 Vul alle velden in!';
+            errorEl.classList.add('show'); return;
+        }
+        if (!validateEmail(emailVal)) {
+            errorEl.textContent = '\u26A0 Vul een geldig e-mailadres in!';
+            errorEl.classList.add('show'); return;
+        }
+        errorEl.classList.remove('show');
     }
     if (step === 3) {
         groupPredictions = getGroupResults();
@@ -711,6 +773,8 @@ document.getElementById('payment-confirm-row').addEventListener('click', functio
 
 function submitPrediction() {
     var name = document.getElementById('player-name').value.trim();
+    var email = document.getElementById('player-email').value.trim();
+    var relation = document.getElementById('player-relation').value;
     if (!document.getElementById('payment-confirm').checked) {
         alert('Bevestig eerst de betaling!'); return;
     }
@@ -721,6 +785,8 @@ function submitPrediction() {
     }
     var data = {
         naam: name,
+        email: email,
+        relatie: relation,
         groepsfase: getGroupResults(),
         beste_derdes: derdes,
         third_assignments: thirdPlaceAssignments,
@@ -748,8 +814,9 @@ document.getElementById('btn-back-3').addEventListener('click', function() { goT
 document.getElementById('btn-next-3').addEventListener('click', function() { goToStep(4); });
 document.getElementById('btn-back-4').addEventListener('click', function() { goToStep(3); });
 document.getElementById('btn-submit').addEventListener('click', submitPrediction);
-document.getElementById('player-name').addEventListener('keypress', function(e) { if (e.key === 'Enter') goToStep(2); });
-document.getElementById('player-name').addEventListener('input', function() { document.getElementById('name-error').classList.remove('show'); });
+['player-name','player-email','player-relation'].forEach(function(id){
+    document.getElementById(id).addEventListener('input', function() { document.getElementById('form-error').classList.remove('show'); });
+});
 
 buildGroups();
 })();
@@ -789,7 +856,6 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .punten-grid strong { color:#fff; }
 .stats-bar { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
 .stat-pill { background:rgba(46,204,113,0.15); border:1px solid rgba(46,204,113,0.3); padding:8px 14px; border-radius:20px; font-size:0.9em; }
-.stat-pill.pending { background:rgba(241,196,15,0.15); border-color:rgba(241,196,15,0.3); }
 .modal-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; padding:20px; overflow-y:auto; }
 .modal-overlay.active { display:block; }
 .modal-content { max-width:900px; margin:20px auto; background:linear-gradient(135deg,#1a1a2e,#16213e); border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:30px; position:relative; }
@@ -867,13 +933,11 @@ Promise.all([
     var c = document.getElementById('scoreboard-content');
     var sb = document.getElementById('stats-bar');
 
-    var paid = d.players ? d.players.length : 0;
-    var pending = d.unpaid_count || 0;
-    var statsHtml = '<div class="stat-pill">&#9989; ' + paid + ' betaalde voorspelling(en)</div>';
-    if (pending > 0) statsHtml += '<div class="stat-pill pending">&#8987; ' + pending + ' wachten op betaling</div>';
+    var totalPlayers = d.players ? d.players.length : 0;
+    var statsHtml = '<div class="stat-pill">&#127918; ' + totalPlayers + ' deelnemer(s)</div>';
     sb.innerHTML = statsHtml;
 
-    if (!d.players || !d.players.length) { c.innerHTML = '<p>Nog geen betaalde voorspellingen.</p>'; return; }
+    if (!d.players || !d.players.length) { c.innerHTML = '<p>Nog geen voorspellingen.</p>'; return; }
     var h = '<table class="leaderboard"><thead><tr><th>#</th><th style="text-align:left;">Speler</th><th>Kampioen</th><th class="hide-mobile">Groep</th><th class="hide-mobile">R32</th><th class="hide-mobile">R16</th><th class="hide-mobile">KF</th><th class="hide-mobile">HF</th><th class="hide-mobile">Win</th><th>TOTAAL</th></tr></thead><tbody>';
     for (var i = 0; i < d.players.length; i++) {
         var p = d.players[i];
@@ -1093,25 +1157,19 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .pay-stat .num { font-size:2em; font-weight:bold; }
 .pay-stat .lbl { color:#aaa; font-size:0.85em; margin-top:4px; }
 .pay-stat.total .num { color:#ffd700; }
-.pay-stat.paid .num { color:#2ecc71; }
-.pay-stat.unpaid .num { color:#e74c3c; }
 .pay-stat.collected .num { color:#3498db; }
-.pay-list { list-style:none; padding:0; }
-.pay-row { display:flex; align-items:center; gap:12px; padding:14px; margin-bottom:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:10px; transition:all 0.2s; }
-.pay-row.paid { background:rgba(46,204,113,0.08); border-color:rgba(46,204,113,0.3); }
-.pay-row .pay-checkbox { transform:scale(1.4); accent-color:#2ecc71; cursor:pointer; }
-.pay-row .pay-name { flex:1; font-weight:bold; }
-.pay-row .pay-date { color:#888; font-size:0.85em; }
-.pay-row .pay-status { padding:4px 10px; border-radius:6px; font-size:0.8em; font-weight:bold; }
-.pay-row .pay-status.paid { background:rgba(46,204,113,0.2); color:#2ecc71; }
-.pay-row .pay-status.unpaid { background:rgba(241,196,15,0.2); color:#f1c40f; }
+.participants-list { list-style:none; padding:0; }
+.participants-row { display:flex; align-items:center; gap:12px; padding:14px; margin-bottom:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:10px; }
+.participants-row .pn { flex:1; font-weight:bold; }
+.participants-row .pe { color:#aaa; font-size:0.85em; }
+.participants-row .pr { color:#3498db; font-size:0.85em; padding:4px 8px; background:rgba(52,152,219,0.15); border-radius:6px; }
+.participants-row .pd { color:#888; font-size:0.85em; }
 .pay-search { width:100%; padding:12px 16px; margin-bottom:16px; border:2px solid rgba(255,255,255,0.2); border-radius:10px; background:rgba(255,255,255,0.05); color:#fff; font-size:1em; outline:none; }
 .pay-search:focus { border-color:#e94560; }
 .iban-display { background:rgba(255,215,0,0.1); border:1px solid rgba(255,215,0,0.3); padding:12px; border-radius:10px; margin-bottom:16px; font-family:'Courier New',monospace; }
 @media (max-width:600px) {
     .match-card { flex-direction:column; }
-    .pay-row { flex-wrap:wrap; }
-    .pay-row .pay-date { width:100%; }
+    .participants-row { flex-wrap:wrap; }
 }
 </style></head><body>
 <div class="container">
@@ -1119,21 +1177,21 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div class="nav-links"><a href="/">Home</a><a href="/scoreboard">Scoreboard</a><a href="/admin/logout">Uitloggen</a></div>
 
 <div class="tabs">
-<div class="tab active" data-tab="payments">&#128176; Betalingen</div>
+<div class="tab active" data-tab="participants">&#128101; Deelnemers</div>
 <div class="tab" data-tab="results-input">&#9989; Resultaten</div>
 <div class="tab" data-tab="leaderboard">&#127942; Rangschikking</div>
 <div class="tab" data-tab="all-predictions">&#128203; Voorspellingen</div>
 </div>
 
-<div class="tab-content active" id="tab-payments">
+<div class="tab-content active" id="tab-participants">
 <div class="card">
-<h2>&#128176; Betalingen Beheren</h2>
+<h2>&#128101; Deelnemers Overzicht</h2>
 <div class="iban-display">
 <strong>Bankrekening:</strong> %IBAN% &nbsp;|&nbsp; <strong>Inleg:</strong> &euro;%INLEG% per persoon
 </div>
 <div id="pay-summary" class="pay-summary"></div>
-<input type="text" class="pay-search" id="pay-search" placeholder="&#128269; Zoek op naam...">
-<div id="payments-container">Laden...</div>
+<input type="text" class="pay-search" id="pay-search" placeholder="&#128269; Zoek op naam, e-mail of relatie...">
+<div id="participants-container">Laden...</div>
 </div>
 </div>
 
@@ -1162,7 +1220,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 </div>
 
 <div class="tab-content" id="tab-leaderboard">
-<div class="card"><h2>Rangschikking (alleen betaald)</h2><div id="admin-leaderboard-container">Laden...</div></div>
+<div class="card"><h2>Rangschikking</h2><div id="admin-leaderboard-container">Laden...</div></div>
 </div>
 
 <div class="tab-content" id="tab-all-predictions">
@@ -1180,7 +1238,7 @@ var adminGroupResults = {};
 var adminThirdAssignments = {};
 var adminKnockoutSelections = {};
 var adminCurrentStep = 1;
-var allPaymentData = [];
+var allParticipants = [];
 
 document.querySelectorAll('.tab').forEach(function(t) {
     t.addEventListener('click', function() {
@@ -1455,67 +1513,44 @@ function adminSave() {
     });
 }
 
-function loadPayments() {
+function loadParticipants() {
     fetch('/api/admin/payments').then(function(r){return r.json();}).then(function(d) {
-        allPaymentData = d.players || [];
-        renderPaymentSummary();
-        renderPaymentList(allPaymentData);
+        allParticipants = d.players || [];
+        renderSummary();
+        renderParticipantsList(allParticipants);
     });
 }
 
-function renderPaymentSummary() {
-    var paid = allPaymentData.filter(function(p){return p.betaald;}).length;
-    var total = allPaymentData.length;
-    var unpaid = total - paid;
+function renderSummary() {
+    var total = allParticipants.length;
     var html = '';
-    html += '<div class="pay-stat total"><div class="num">' + total + '</div><div class="lbl">Totaal voorspellingen</div></div>';
-    html += '<div class="pay-stat paid"><div class="num">' + paid + '</div><div class="lbl">Betaald</div></div>';
-    html += '<div class="pay-stat unpaid"><div class="num">' + unpaid + '</div><div class="lbl">Nog niet betaald</div></div>';
-    html += '<div class="pay-stat collected"><div class="num">&euro;' + (paid * INLEG) + '</div><div class="lbl">Geïnd</div></div>';
+    html += '<div class="pay-stat total"><div class="num">' + total + '</div><div class="lbl">Deelnemers</div></div>';
+    html += '<div class="pay-stat collected"><div class="num">&euro;' + (total * INLEG) + '</div><div class="lbl">Verwacht totaal</div></div>';
+    html += '<div class="pay-stat collected"><div class="num">&euro;' + (total * INLEG / 2).toFixed(0) + '</div><div class="lbl">&#10084;&#65039; Naar goed doel</div></div>';
+    html += '<div class="pay-stat collected"><div class="num">&euro;' + (total * INLEG / 2).toFixed(0) + '</div><div class="lbl">&#127942; Voor winnaars</div></div>';
     document.getElementById('pay-summary').innerHTML = html;
 }
 
-function renderPaymentList(list) {
-    var c = document.getElementById('payments-container');
-    if (!list.length) { c.innerHTML = '<p style="color:#aaa;">Nog geen voorspellingen.</p>'; return; }
-    var h = '<ul class="pay-list">';
-    list.sort(function(a,b){
-        if (a.betaald !== b.betaald) return a.betaald ? 1 : -1;
-        return (a.datum || '').localeCompare(b.datum || '');
-    });
+function renderParticipantsList(list) {
+    var c = document.getElementById('participants-container');
+    if (!list.length) { c.innerHTML = '<p style="color:#aaa;">Nog geen deelnemers.</p>'; return; }
+    list.sort(function(a,b){ return (a.datum || '').localeCompare(b.datum || ''); });
+    var h = '<ul class="participants-list">';
     for (var i = 0; i < list.length; i++) {
         var p = list[i];
-        h += '<li class="pay-row ' + (p.betaald?'paid':'') + '" data-name="' + escAttr(p.naam) + '">';
-        h += '<input type="checkbox" class="pay-checkbox" ' + (p.betaald?'checked':'') + ' data-name="' + escAttr(p.naam) + '">';
-        h += '<div style="flex:1;">';
-        h += '<div class="pay-name">' + escAttr(p.naam) + '</div>';
-        h += '<div class="pay-date">Ingediend: ' + (p.datum||'?') + '</div>';
+        h += '<li class="participants-row">';
+        h += '<div style="flex:1;min-width:200px;">';
+        h += '<div class="pn">' + escAttr(p.naam) + '</div>';
+        if (p.email) h += '<div class="pe">&#9993; ' + escAttr(p.email) + '</div>';
+        h += '<div class="pd">Ingediend: ' + (p.datum||'?') + '</div>';
         h += '</div>';
-        h += '<span class="pay-status ' + (p.betaald?'paid':'unpaid') + '">' + (p.betaald?'&#10003; BETAALD':'&#8987; OPEN') + '</span>';
+        if (p.relatie) h += '<span class="pr">' + escAttr(p.relatie) + '</span>';
         h += '<button class="btn btn-danger" data-delete="' + escAttr(p.naam) + '">&#128465; Verwijder</button>';
         h += '</li>';
     }
     h += '</ul>';
     c.innerHTML = h;
 
-    var checkboxes = c.querySelectorAll('.pay-checkbox');
-    for (var i = 0; i < checkboxes.length; i++) {
-        checkboxes[i].addEventListener('change', function() {
-            var name = this.getAttribute('data-name');
-            var paid = this.checked;
-            fetch('/api/admin/payment', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({naam:name, betaald:paid}) })
-            .then(function(r){return r.json();}).then(function(res) {
-                if (res.success) {
-                    for (var k = 0; k < allPaymentData.length; k++) {
-                        if (allPaymentData[k].naam === name) allPaymentData[k].betaald = paid;
-                    }
-                    renderPaymentSummary();
-                    renderPaymentList(filterPayments());
-                    loadAdminLeaderboard();
-                } else alert('Fout: ' + res.error);
-            });
-        });
-    }
     var delBtns = c.querySelectorAll('[data-delete]');
     for (var i = 0; i < delBtns.length; i++) {
         delBtns[i].addEventListener('click', function() {
@@ -1523,27 +1558,31 @@ function renderPaymentList(list) {
             if (!confirm('Voorspelling van "' + name + '" verwijderen? Dit kan niet ongedaan worden!')) return;
             fetch('/api/admin/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({naam:name}) })
             .then(function(r){return r.json();}).then(function(res) {
-                if (res.success) { loadPayments(); loadAdminLeaderboard(); loadAllPredictions(); }
+                if (res.success) { loadParticipants(); loadAdminLeaderboard(); loadAllPredictions(); }
                 else alert('Fout: ' + res.error);
             });
         });
     }
 }
 
-function filterPayments() {
+function filterParticipants() {
     var q = document.getElementById('pay-search').value.toLowerCase().trim();
-    if (!q) return allPaymentData;
-    return allPaymentData.filter(function(p){ return p.naam.toLowerCase().indexOf(q) >= 0; });
+    if (!q) return allParticipants;
+    return allParticipants.filter(function(p){
+        return (p.naam||'').toLowerCase().indexOf(q) >= 0
+            || (p.email||'').toLowerCase().indexOf(q) >= 0
+            || (p.relatie||'').toLowerCase().indexOf(q) >= 0;
+    });
 }
 
 document.getElementById('pay-search').addEventListener('input', function() {
-    renderPaymentList(filterPayments());
+    renderParticipantsList(filterParticipants());
 });
 
 function loadAdminLeaderboard() {
     fetch('/api/scoreboard').then(function(r){return r.json();}).then(function(d) {
         var c = document.getElementById('admin-leaderboard-container');
-        if (!d.players || !d.players.length) { c.innerHTML = '<p>Nog geen betaalde voorspellingen.</p>'; return; }
+        if (!d.players || !d.players.length) { c.innerHTML = '<p>Nog geen voorspellingen.</p>'; return; }
         var h = '<table class="leaderboard"><thead><tr><th>#</th><th style="text-align:left;">Speler</th><th>Kampioen</th><th>Groep</th><th>R32</th><th>R16</th><th>KF</th><th>HF</th><th>Win</th><th>TOTAAL</th></tr></thead><tbody>';
         for (var i = 0; i < d.players.length; i++) {
             var p = d.players[i];
@@ -1566,8 +1605,9 @@ function loadAllPredictions() {
         var h = '<p style="color:#aaa;">' + names.length + ' voorspelling(en)</p>';
         for (var i = 0; i < names.length; i++) {
             var p = d[names[i]];
-            var paidLbl = p.betaald ? '<span style="color:#2ecc71;">&#10003; Betaald</span>' : '<span style="color:#f1c40f;">&#8987; Open</span>';
-            h += '<div class="player-detail-card"><h4>' + p.naam + ' &nbsp; ' + paidLbl + '</h4>';
+            h += '<div class="player-detail-card"><h4>' + p.naam + '</h4>';
+            if (p.email) h += '<div class="info">&#9993; ' + p.email + '</div>';
+            if (p.relatie) h += '<div class="info">&#127973; ' + p.relatie + '</div>';
             h += '<div class="info">Kampioen: <strong style="color:#ffd700;">' + (p.knockout ? p.knockout.finale : '?') + '</strong></div>';
             h += '<div class="info">Ingediend: ' + (p.datum || '?') + '</div></div>';
         }
@@ -1580,7 +1620,7 @@ document.getElementById('admin-btn-back-2').addEventListener('click', function()
 document.getElementById('admin-btn-save').addEventListener('click', adminSave);
 
 adminBuildGroups();
-loadPayments();
+loadParticipants();
 loadAdminLeaderboard();
 loadAllPredictions();
 })();
@@ -1659,7 +1699,9 @@ def submit():
         naam = data.get('naam', '').strip()
         if not naam:
             return jsonify({"success": False, "error": "Naam is verplicht"})
+        # Auto-set betaald op true (we vertrouwen iedereen)
         save_prediction(naam, data)
+        set_paid_status(naam, True)
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -1667,8 +1709,7 @@ def submit():
 
 @app.route('/api/predictions', methods=['GET'])
 def get_predictions():
-    all_data = load_data()
-    return jsonify({k: v for k, v in all_data.items() if v.get('betaald')})
+    return jsonify(load_data())
 
 
 @app.route('/api/public/results', methods=['GET'])
@@ -1681,18 +1722,13 @@ def get_scoreboard():
     all_predictions = load_data()
     real_results = load_results()
     players = []
-    unpaid = 0
     for naam, pred in all_predictions.items():
-        if not pred.get('betaald'):
-            unpaid += 1
-            continue
         points = calculate_points(pred, real_results)
         kampioen = pred.get('knockout', {}).get('finale', '?')
         players.append({"naam": naam, "kampioen": kampioen, "points": points})
     players.sort(key=lambda x: x["points"]["totaal"], reverse=True)
     return jsonify({
         "players": players,
-        "unpaid_count": unpaid,
         "results_available": bool(real_results and real_results.get("groepsfase"))
     })
 
@@ -1705,27 +1741,12 @@ def admin_payments():
     for naam, pred in all_data.items():
         players.append({
             "naam": naam,
+            "email": pred.get('email', ''),
+            "relatie": pred.get('relatie', ''),
             "datum": pred.get('datum', '?'),
-            "betaald": bool(pred.get('betaald')),
             "kampioen": pred.get('knockout', {}).get('finale', '?')
         })
     return jsonify({"players": players})
-
-
-@app.route('/api/admin/payment', methods=['POST'])
-def admin_set_payment():
-    if not session.get('is_admin'):
-        return jsonify({"success": False, "error": "Niet geautoriseerd"})
-    try:
-        data = request.get_json()
-        naam = data.get('naam', '').strip()
-        betaald = bool(data.get('betaald'))
-        if not naam:
-            return jsonify({"success": False, "error": "Naam is verplicht"})
-        set_paid_status(naam, betaald)
-        return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
 
 
 @app.route('/api/admin/delete', methods=['POST'])
