@@ -211,11 +211,9 @@ def save_results(data):
 
 
 def update_results_partial(partial_data):
-    """Update slechts een onderdeel van de resultaten (bv. enkel groepsfase, of enkel R16)."""
     current = load_results()
     if not current:
         current = {}
-    # Merge top-level keys
     for key, value in partial_data.items():
         if key == 'knockout':
             if 'knockout' not in current:
@@ -229,7 +227,6 @@ def update_results_partial(partial_data):
 
 
 def clear_results_section(section):
-    """Verwijder een specifieke sectie uit de resultaten."""
     current = load_results()
     if not current:
         return {}
@@ -282,7 +279,6 @@ def calculate_points(prediction, real_results):
     if real_ko.get("finale") and pred_ko.get("finale") == real_ko.get("finale"):
         points["winnaar"] = PUNTEN["winnaar_juist"]
     points["totaal"] = sum(points[k] for k in ["groep_positie","r32","r16","qf","sf","winnaar"])
-    # Schiftingsvraag: hoe dicht bij het echte aantal doelpunten?
     real_goals = real_results.get("totaal_doelpunten")
     pred_goals = prediction.get("totaal_doelpunten")
     if real_goals is not None and pred_goals is not None:
@@ -403,17 +399,13 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 <h2>&#127947; Welkom bij de WK 2026 poule!</h2>
 
 <div class="intro-box">
-<p>&#127881; <strong>Het is weer zover!</strong> Onze 2-jaarlijkse traditie is terug: de grote AZ St Blasius voetbalpoule! Of het nu de Wereldbeker of het EK is &mdash; wij voorspellen er lustig op los.</p>
-
-<p>&#127918; <strong>Je hoeft GEEN voetbalkenner te zijn!</strong> Wie weet zit jij straks bovenaan met je &laquo;buikgevoel-tactiek&raquo;. We hebben in het verleden al gezien dat de stagiaire die nog nooit een match gezien heeft, de kenners om de oren slaat. &#128514;</p>
-
-<p>&#129309; <strong>Meedoen is belangrijker dan winnen.</strong> Het draait om de plezier, de discussies aan de koffieautomaat en het samen leven met onze favorieten op het veld.</p>
-
+<p>&#127881; <strong>Het is weer zover!</strong> Onze 2-jaarlijkse traditie is terug: de grote AZ St Blasius voetbalpoule!</p>
+<p>&#127918; <strong>Je hoeft GEEN voetbalkenner te zijn!</strong> Wie weet zit jij straks bovenaan met je &laquo;buikgevoel-tactiek&raquo;.</p>
+<p>&#129309; <strong>Meedoen is belangrijker dan winnen.</strong> Het draait om het plezier en de discussies aan de koffieautomaat.</p>
 <div class="intro-highlight">
-&#10084;&#65039; <strong>De helft van de inleg gaat naar het goede doel.</strong> De andere helft wordt verdeeld over de top-voorspellers. Win-win voor iedereen!
+&#10084;&#65039; <strong>De helft van de inleg gaat naar het goede doel.</strong> De andere helft naar de top-voorspellers.
 </div>
-
-<p>&#9917; Klaar? Vul hieronder je gegevens in en laat de voorspellingen beginnen!</p>
+<p>&#9917; Klaar? Vul hieronder je gegevens in!</p>
 </div>
 
 <h3 style="margin-top:24px;">&#128100; Vertel ons wie je bent</h3>
@@ -438,7 +430,7 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 <label for="player-goals">Schiftingsvraag: Hoeveel doelpunten op het hele WK? <span class="req">*</span></label>
 <div class="schifting-box">
 <h4>&#127943; Tiebreaker</h4>
-<p>Tel <strong>alle doelpunten</strong> die er gemaakt zullen worden tijdens het volledige WK 2026 (groepsfase + knock-out + finale). Bij gelijke punten op het scoreboard wint wie het dichtst bij het echte aantal zit! <strong>Jouw antwoord blijft geheim</strong> voor andere deelnemers.</p>
+<p>Tel <strong>alle doelpunten</strong> die er gemaakt zullen worden tijdens het volledige WK 2026. Bij gelijke punten wint wie het dichtst bij het echte aantal zit! <strong>Jouw antwoord blijft geheim</strong> voor andere deelnemers.</p>
 <input type="number" class="form-number" id="player-goals" placeholder="Bijv. 165" min="0" max="500">
 </div>
 </div>
@@ -502,7 +494,7 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 </div>
 
 <div class="payment-warning">
-&#9888; <strong>Belangrijk:</strong> De QR-code bevat <strong>automatisch jouw naam</strong> in de mededeling, zodat we de betaling kunnen koppelen aan je voorspelling.
+&#9888; <strong>Belangrijk:</strong> De QR-code bevat <strong>automatisch jouw naam</strong> in de mededeling.
 </div>
 
 <div class="payment-checkbox-row" id="payment-confirm-row">
@@ -524,7 +516,7 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 <h2>Voorspelling Ingediend!</h2>
 <p>Bedankt <strong id="confirm-name"></strong>!</p>
 <p class="champion-name">Jouw kampioen: <span id="confirm-champion"></span></p>
-<p style="color:#aaa;margin:20px 0;">Veel succes! Hou het scoreboard in de gaten tijdens het toernooi. &#9917;</p>
+<p style="color:#aaa;margin:20px 0;">Veel succes! Hou het scoreboard in de gaten. &#9917;</p>
 <div class="btn-group">
 <button class="btn btn-secondary" onclick="location.reload()">Nieuwe Voorspelling</button>
 <button class="btn btn-primary" onclick="window.location.href='/scoreboard'">Scoreboard</button>
@@ -560,7 +552,7 @@ function loadQRCode(name) {
         }
     })
     .catch(function() {
-        container.innerHTML = 'Fout bij laden QR-code. Gebruik handmatige gegevens hieronder.';
+        container.innerHTML = 'Fout bij laden QR-code.';
     });
 }
 
@@ -713,7 +705,7 @@ function buildThirdPlaceAssignment(container) {
     div.className = 'knockout-round';
     div.id = 'third-assignment';
     var html = '<h3>&#127919; Wijs Beste Derdes toe aan Wedstrijden</h3>';
-    html += '<p class="drag-hint">Voor elke wedstrijd: kies welk #3 team daadwerkelijk speelt. Elk team kan maar 1x. De 4 niet-gekozen #3 teams gaan naar huis.</p>';
+    html += '<p class="drag-hint">Voor elke wedstrijd: kies welk #3 team daadwerkelijk speelt.</p>';
     for (var i = 0; i < R32_STRUCTURE.length; i++) {
         var match = R32_STRUCTURE[i];
         if (match.slot2.type !== 'third') continue;
@@ -829,7 +821,7 @@ function buildNextRound(rk) {
     for (var j = 0; j < counts[rk]; j++) winners.push(knockoutSelections[rk][j]);
     var nm = [];
     for (var k = 0; k < winners.length; k += 2) nm.push({ team1: winners[k], team2: winners[k + 1] });
-    renderRound(container, names[rk], nm, nk);
+    renderRound(container, names[nk], nm, nk);
 }
 
 document.addEventListener('click', function(e) {
@@ -850,13 +842,6 @@ document.addEventListener('click', function(e) {
             btn.innerHTML = '&#10003; Gekopieerd';
             setTimeout(function(){ btn.classList.remove('copied'); btn.innerHTML = oldHtml; }, 2000);
         });
-    } else {
-        var ta = document.createElement('textarea');
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        try { document.execCommand('copy'); } catch(e) {}
-        document.body.removeChild(ta);
     }
 });
 
@@ -926,6 +911,7 @@ buildGroups();
 </script>
 </body></html>
 """
+
 # ============================================================
 # SCOREBOARD
 # ============================================================
@@ -949,7 +935,6 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .leaderboard tr.clickable { cursor:pointer; transition:background 0.2s; }
 .leaderboard tr.clickable:hover { background:rgba(233,69,96,0.1); }
 .leaderboard .name { text-align:left; font-weight:bold; color:#fff; }
-.leaderboard .name:hover { color:#e94560; text-decoration:underline; }
 .leaderboard .total { font-weight:bold; font-size:1.3em; color:#2ecc71; }
 .leaderboard .schifting { color:#bb8fce; font-size:0.85em; }
 .rank-1{color:#ffd700;} .rank-2{color:#c0c0c0;} .rank-3{color:#cd7f32;}
@@ -965,11 +950,9 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .modal-overlay.active { display:block; }
 .modal-content { max-width:900px; margin:20px auto; background:linear-gradient(135deg,#1a1a2e,#16213e); border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:30px; position:relative; }
 .modal-close { position:absolute; top:15px; right:15px; width:40px; height:40px; border-radius:50%; border:none; background:rgba(233,69,96,0.2); color:#fff; font-size:1.5em; cursor:pointer; }
-.modal-close:hover { background:#e94560; }
 .modal-content h2 { color:#e94560; margin-bottom:8px; }
 .modal-content h3 { color:#f0a500; margin:20px 0 10px 0; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.1); }
 .modal-info { color:#aaa; font-size:0.9em; margin-bottom:20px; }
-.modal-info strong { color:#ffd700; }
 .modal-group-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
 .modal-group { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; }
 .modal-group h4 { color:#f0a500; margin-bottom:8px; font-size:0.95em; }
@@ -1002,14 +985,14 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div class="punten-info">
 <h3>&#128218; Puntensysteem</h3>
 <div class="punten-grid">
-<span><strong>3pt</strong> juiste positie in groep (max 12/groep)</span>
+<span><strong>3pt</strong> juiste positie in groep</span>
 <span><strong>10pt</strong> 1/16 finale winnaar</span>
 <span><strong>20pt</strong> 1/8 finale winnaar</span>
 <span><strong>30pt</strong> kwartfinale winnaar</span>
 <span><strong>50pt</strong> halve finale winnaar</span>
 <span><strong>100pt</strong> wereldkampioen</span>
 </div>
-<p style="margin-top:8px;color:#bb8fce;font-size:0.85em;">&#127943; <strong>Tiebreaker:</strong> bij gelijke punten wint wie het dichtst bij het echte aantal doelpunten op het WK zit. Antwoorden van deelnemers blijven geheim tot na het toernooi.</p>
+<p style="margin-top:8px;color:#bb8fce;font-size:0.85em;">&#127943; <strong>Tiebreaker:</strong> bij gelijke punten wint wie het dichtst bij het echte aantal doelpunten zit. Antwoorden van deelnemers blijven geheim tot na het toernooi.</p>
 </div>
 
 <div class="card">
@@ -1078,8 +1061,6 @@ Promise.all([
         h += '</tr>';
     }
     h += '</tbody></table>';
-    if (d.results_available) h += '<p style="text-align:center;color:#666;font-size:0.8em;margin-top:12px;">&#9989; Echte resultaten ingevuld</p>';
-    else h += '<p style="text-align:center;color:#666;font-size:0.8em;margin-top:12px;">&#9888; Nog geen echte resultaten</p>';
     c.innerHTML = h;
 
     var rows = c.querySelectorAll('tr.clickable');
@@ -1228,7 +1209,6 @@ ADMIN_TEMPLATE = r"""<!DOCTYPE html>
 body { font-family:'Segoe UI',sans-serif; background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460); min-height:100vh; color:#fff; padding:20px; }
 .container { max-width:1100px; margin:0 auto; }
 h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
-.subtitle { text-align:center; color:#aaa; margin-bottom:30px; }
 .nav-links { text-align:center; margin-bottom:20px; }
 .nav-links a { color:#aaa; text-decoration:none; margin:0 10px; padding:8px 16px; border-radius:8px; background:rgba(255,255,255,0.05); }
 .card { background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:24px; margin-bottom:20px; }
@@ -1286,7 +1266,6 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .participants-row .pr { color:#3498db; font-size:0.85em; padding:4px 8px; background:rgba(52,152,219,0.15); border-radius:6px; }
 .participants-row .pd { color:#888; font-size:0.85em; }
 .pay-search { width:100%; padding:12px 16px; margin-bottom:16px; border:2px solid rgba(255,255,255,0.2); border-radius:10px; background:rgba(255,255,255,0.05); color:#fff; font-size:1em; outline:none; }
-.pay-search:focus { border-color:#e94560; }
 .iban-display { background:rgba(255,215,0,0.1); border:1px solid rgba(255,215,0,0.3); padding:12px; border-radius:10px; margin-bottom:16px; font-family:'Courier New',monospace; }
 .backup-card { background:linear-gradient(135deg,rgba(52,152,219,0.1),rgba(46,204,113,0.05)); border:1px solid rgba(52,152,219,0.3); border-radius:12px; padding:20px; margin-bottom:20px; }
 .backup-card h3 { color:#3498db; }
@@ -1296,14 +1275,12 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .results-section h3 .status.saved { background:rgba(46,204,113,0.2); color:#2ecc71; border:1px solid #2ecc71; }
 .results-section h3 .status.empty { background:rgba(255,255,255,0.05); color:#888; border:1px solid rgba(255,255,255,0.1); }
 .team-checklist { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:8px; margin:12px 0; }
-.team-check { display:flex; align-items:center; gap:8px; padding:10px 12px; background:rgba(255,255,255,0.04); border:2px solid rgba(255,255,255,0.1); border-radius:8px; cursor:pointer; transition:all 0.15s; user-select:none; }
-.team-check:hover { background:rgba(255,255,255,0.08); }
+.team-check { display:flex; align-items:center; gap:8px; padding:10px 12px; background:rgba(255,255,255,0.04); border:2px solid rgba(255,255,255,0.1); border-radius:8px; cursor:pointer; user-select:none; }
 .team-check.checked { background:rgba(46,204,113,0.15); border-color:#2ecc71; }
 .team-check input { transform:scale(1.2); accent-color:#2ecc71; }
 .counter-badge { display:inline-block; padding:4px 12px; background:rgba(155,89,182,0.2); border:1px solid rgba(155,89,182,0.5); border-radius:12px; font-size:0.85em; color:#bb8fce; margin-left:8px; }
 .counter-badge.full { background:rgba(46,204,113,0.2); border-color:#2ecc71; color:#2ecc71; }
 .goals-input { width:200px; padding:14px; border:2px solid rgba(155,89,182,0.4); border-radius:10px; background:rgba(155,89,182,0.05); color:#fff; font-size:1.3em; text-align:center; font-weight:bold; }
-.goals-input:focus { border-color:#bb8fce; outline:none; }
 .intro-info { background:linear-gradient(135deg,rgba(52,152,219,0.1),rgba(155,89,182,0.05)); border-left:4px solid #3498db; padding:14px 18px; border-radius:8px; margin-bottom:20px; line-height:1.6; }
 .intro-info strong { color:#3498db; }
 @media (max-width:600px) {
@@ -1335,7 +1312,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 
 <div class="backup-card">
 <h3>&#128190; Backup</h3>
-<p style="color:#ccc;margin-bottom:12px;">Download alle voorspellingen en resultaten als JSON-bestand. Doe dit regelmatig tijdens het toernooi voor de zekerheid!</p>
+<p style="color:#ccc;margin-bottom:12px;">Download alle voorspellingen en resultaten als JSON-bestand.</p>
 <a href="/api/admin/backup" class="btn btn-success" style="display:inline-block;text-decoration:none;">&#128229; Download Backup</a>
 </div>
 </div>
@@ -1344,13 +1321,12 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div class="card">
 <h2>&#9989; Echte Resultaten - Per Ronde Opslaan</h2>
 <div class="intro-info">
-<strong>&#128161; Werkwijze:</strong> Vul tussentijds resultaten in zodra een ronde is afgelopen. Elke sectie heeft een eigen <strong>"Opslaan"</strong> en <strong>"Wissen"</strong> knop. Het scoreboard wordt direct bijgewerkt na elke save.
+<strong>&#128161; Werkwijze:</strong> Vul tussentijds resultaten in zodra een ronde is afgelopen. Elke sectie heeft een eigen <strong>"Opslaan"</strong> en <strong>"Wissen"</strong> knop.
 </div>
 
-<!-- Groepsfase -->
 <div class="results-section">
 <h3>&#128202; 1. Groepsfase (eindstand) <span id="status-groepsfase" class="status empty">Niet ingevuld</span></h3>
-<p class="drag-hint">Sleep teams in de juiste eindstand per groep (1=winnaar, 2=runner-up, 3=derde, 4=laatste).</p>
+<p class="drag-hint">Sleep teams in de juiste eindstand per groep.</p>
 <div class="group-grid" id="admin-groups-container"></div>
 <div class="btn-group" style="justify-content:flex-start;">
 <button class="btn btn-success btn-small" id="save-groepsfase">&#128190; Groepsfase Opslaan</button>
@@ -1359,9 +1335,8 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div class="status-msg hidden" id="status-msg-groepsfase"></div>
 </div>
 
-<!-- R32 -->
 <div class="results-section">
-<h3>&#127919; 2. 1/16 Finales - Welke 16 teams gaan door? <span id="status-r32" class="status empty">Niet ingevuld</span> <span id="counter-r32" class="counter-badge">0/16</span></h3>
+<h3>&#127919; 2. 1/16 Finales <span id="status-r32" class="status empty">Niet ingevuld</span> <span id="counter-r32" class="counter-badge">0/16</span></h3>
 <p class="drag-hint">Vink de 16 teams aan die de 1/8 finales bereiken.</p>
 <div id="r32-container">Vul eerst de groepsfase in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-r32-row">
@@ -1371,9 +1346,8 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div class="status-msg hidden" id="status-msg-r32"></div>
 </div>
 
-<!-- R16 -->
 <div class="results-section">
-<h3>&#127919; 3. 1/8 Finales - Welke 8 teams gaan door? <span id="status-r16" class="status empty">Niet ingevuld</span> <span id="counter-r16" class="counter-badge">0/8</span></h3>
+<h3>&#127919; 3. 1/8 Finales <span id="status-r16" class="status empty">Niet ingevuld</span> <span id="counter-r16" class="counter-badge">0/8</span></h3>
 <p class="drag-hint">Vink de 8 teams aan die de kwartfinales bereiken.</p>
 <div id="r16-container">Vul eerst R32 in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-r16-row">
@@ -1383,9 +1357,8 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div class="status-msg hidden" id="status-msg-r16"></div>
 </div>
 
-<!-- QF -->
 <div class="results-section">
-<h3>&#127919; 4. Kwartfinales - Welke 4 teams gaan door? <span id="status-qf" class="status empty">Niet ingevuld</span> <span id="counter-qf" class="counter-badge">0/4</span></h3>
+<h3>&#127919; 4. Kwartfinales <span id="status-qf" class="status empty">Niet ingevuld</span> <span id="counter-qf" class="counter-badge">0/4</span></h3>
 <p class="drag-hint">Vink de 4 teams aan die de halve finales bereiken.</p>
 <div id="qf-container">Vul eerst R16 in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-qf-row">
@@ -1395,9 +1368,8 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div class="status-msg hidden" id="status-msg-qf"></div>
 </div>
 
-<!-- SF -->
 <div class="results-section">
-<h3>&#127919; 5. Halve Finales - Welke 2 teams gaan door? <span id="status-sf" class="status empty">Niet ingevuld</span> <span id="counter-sf" class="counter-badge">0/2</span></h3>
+<h3>&#127919; 5. Halve Finales <span id="status-sf" class="status empty">Niet ingevuld</span> <span id="counter-sf" class="counter-badge">0/2</span></h3>
 <p class="drag-hint">Vink de 2 finalisten aan.</p>
 <div id="sf-container">Vul eerst kwartfinales in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-sf-row">
@@ -1407,10 +1379,9 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div class="status-msg hidden" id="status-msg-sf"></div>
 </div>
 
-<!-- Finale -->
 <div class="results-section">
 <h3>&#127942; 6. Wereldkampioen <span id="status-finale" class="status empty">Niet ingevuld</span></h3>
-<p class="drag-hint">Selecteer 1 team: de wereldkampioen.</p>
+<p class="drag-hint">Selecteer de wereldkampioen.</p>
 <div id="finale-container">Vul eerst halve finales in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-finale-row">
 <button class="btn btn-success btn-small" id="save-finale" disabled>&#128190; Kampioen Opslaan</button>
@@ -1419,10 +1390,9 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div class="status-msg hidden" id="status-msg-finale"></div>
 </div>
 
-<!-- Doelpunten -->
 <div class="results-section">
 <h3>&#9917; 7. Schiftingsvraag - Totaal aantal doelpunten <span id="status-goals" class="status empty">Niet ingevuld</span></h3>
-<p class="drag-hint">Vul het werkelijke aantal doelpunten in dat tijdens het hele WK is gemaakt.</p>
+<p class="drag-hint">Vul het werkelijke aantal doelpunten in.</p>
 <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
 <input type="number" class="goals-input" id="real-goals" placeholder="Bijv. 165" min="0" max="500">
 <button class="btn btn-success btn-small" id="save-goals">&#128190; Doelpunten Opslaan</button>
@@ -1463,7 +1433,6 @@ document.querySelectorAll('.tab').forEach(function(t) {
 
 function escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
-// ============ GROEPSFASE ============
 function adminBuildGroups() {
     var c = document.getElementById('admin-groups-container');
     c.innerHTML = '';
@@ -1548,6 +1517,7 @@ function adminGetGroupResults() {
 
 function showStatus(elId, msg, ok) {
     var s = document.getElementById(elId);
+    if (!s) return;
     s.classList.remove('hidden');
     s.className = 'status-msg ' + (ok ? 'success' : 'error');
     s.textContent = msg;
@@ -1578,7 +1548,6 @@ document.getElementById('save-groepsfase').addEventListener('click', function() 
     });
 });
 
-// ============ TEAM SELECTOR (R32, R16, QF, SF, FINALE) ============
 function getAvailableTeams(round) {
     if (round === 'r32') {
         var teams = [];
@@ -1592,13 +1561,11 @@ function getAvailableTeams(round) {
         }
         return teams;
     }
-    var prevMap = { r16: 'r32', qf: 'r16', sf: 'qf', finale: 'sf' };
-    var prev = prevMap[round];
-    if (!prev) return [];
-    var prevSel = (currentResults.knockout || {})['ronde_van_32'];
-    if (prev === 'r16') prevSel = (currentResults.knockout || {})['ronde_van_16'];
-    if (prev === 'qf') prevSel = (currentResults.knockout || {})['kwartfinales'];
-    if (prev === 'sf') prevSel = (currentResults.knockout || {})['halve_finales'];
+    var prevSel = null;
+    if (round === 'r16') prevSel = (currentResults.knockout || {})['ronde_van_32'];
+    else if (round === 'qf') prevSel = (currentResults.knockout || {})['ronde_van_16'];
+    else if (round === 'sf') prevSel = (currentResults.knockout || {})['kwartfinales'];
+    else if (round === 'finale') prevSel = (currentResults.knockout || {})['halve_finales'];
     if (!prevSel) return [];
     var teams = [];
     var keys = Object.keys(prevSel);
@@ -1755,7 +1722,6 @@ document.getElementById('save-goals').addEventListener('click', function() {
     });
 });
 
-// ============ CLEAR HANDLERS ============
 document.addEventListener('click', function(e) {
     var btn = e.target.closest('[data-clear]');
     if (!btn) return;
@@ -1769,7 +1735,7 @@ document.addEventListener('click', function(e) {
         'finale': 'wereldkampioen',
         'totaal_doelpunten': 'doelpunten (schiftingsvraag)'
     };
-    if (!confirm('Weet je zeker dat je de "' + (labels[section] || section) + '" wilt wissen? Dit kan niet ongedaan gemaakt worden.')) return;
+    if (!confirm('Weet je zeker dat je "' + (labels[section] || section) + '" wilt wissen?')) return;
     fetch('/api/admin/results/clear', {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ section: section })
@@ -1808,7 +1774,6 @@ document.addEventListener('click', function(e) {
             var rdMap = {'ronde_van_32':'r32','ronde_van_16':'r16','kwartfinales':'qf','halve_finales':'sf','finale':'finale'};
             var maxMap = {'r32':16,'r16':8,'qf':4,'sf':2,'finale':1};
             var idx = order.indexOf(section);
-            // Clear deze + alle volgende rondes
             for (var i = idx; i < order.length; i++) {
                 var rd = rdMap[order[i]];
                 teamSelections[rd] = {};
@@ -1820,7 +1785,6 @@ document.addEventListener('click', function(e) {
                     if (row) row.classList.add('hidden');
                 }
             }
-            // Re-render de gewiste ronde zelf (zodat selectie leeg toont) als previous nog beschikbaar is
             var thisRd = rdMap[section];
             if (thisRd && getAvailableTeams(thisRd).length) {
                 renderTeamSelector(thisRd, maxMap[thisRd]);
@@ -1831,7 +1795,6 @@ document.addEventListener('click', function(e) {
     });
 });
 
-// ============ DEELNEMERS ============
 function loadParticipants() {
     fetch('/api/admin/payments').then(function(r){return r.json();}).then(function(d) {
         allParticipants = d.players || [];
@@ -1877,7 +1840,7 @@ function renderParticipantsList(list) {
     for (var i = 0; i < delBtns.length; i++) {
         delBtns[i].addEventListener('click', function() {
             var name = this.getAttribute('data-delete');
-            if (!confirm('Voorspelling van "' + name + '" verwijderen? Dit kan niet ongedaan worden!')) return;
+            if (!confirm('Voorspelling van "' + name + '" verwijderen?')) return;
             fetch('/api/admin/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({naam:name}) })
             .then(function(r){return r.json();}).then(function(res) {
                 if (res.success) { loadParticipants(); loadAdminLeaderboard(); loadAllPredictions(); }
@@ -1901,7 +1864,6 @@ document.getElementById('pay-search').addEventListener('input', function() {
     renderParticipantsList(filterParticipants());
 });
 
-// ============ LEADERBOARD ============
 function loadAdminLeaderboard() {
     fetch('/api/scoreboard').then(function(r){return r.json();}).then(function(d) {
         var c = document.getElementById('admin-leaderboard-container');
@@ -1946,7 +1908,6 @@ function loadAllPredictions() {
     });
 }
 
-// ============ INIT ============
 function loadCurrentResults() {
     fetch('/api/admin/results').then(function(r){return r.json();}).then(function(d) {
         currentResults = d || {};
@@ -1968,3 +1929,87 @@ function loadCurrentResults() {
             setSectionStatus('qf', true);
             renderTeamSelector('sf', 2);
         }
+        if (ko.halve_finales && Object.keys(ko.halve_finales).length === 2) {
+            setSectionStatus('sf', true);
+            renderTeamSelector('finale', 1);
+        }
+        if (ko.finale) {
+            setSectionStatus('finale', true);
+        }
+        if (currentResults.totaal_doelpunten !== undefined && currentResults.totaal_doelpunten !== null) {
+            setSectionStatus('goals', true);
+            document.getElementById('real-goals').value = currentResults.totaal_doelpunten;
+        }
+    });
+}
+
+loadCurrentResults();
+loadParticipants();
+loadAdminLeaderboard();
+loadAllPredictions();
+})();
+</script>
+</body></html>
+"""
+
+
+# ============================================================
+# ROUTES
+# ============================================================
+
+@app.route('/')
+def index():
+    groepen_json = json.dumps(GROEPEN, ensure_ascii=False)
+    r32_json = json.dumps(R32_STRUCTURE, ensure_ascii=False)
+    html = HTML_TEMPLATE.replace('%GROEPEN_JSON%', groepen_json)
+    html = html.replace('%R32_STRUCTURE_JSON%', r32_json)
+    html = html.replace('%IBAN%', IBAN)
+    html = html.replace('%INLEG%', str(INLEG))
+    return html
+
+
+@app.route('/scoreboard')
+def scoreboard():
+    return render_template_string(SCOREBOARD_TEMPLATE)
+
+
+@app.route('/admin/login', methods=['GET', 'POST'])
+def admin_login():
+    error = None
+    if request.method == 'POST':
+        if request.form.get('password', '') == ADMIN_PASSWORD:
+            session['is_admin'] = True
+            return redirect(url_for('admin_dashboard'))
+        error = "Onjuist wachtwoord!"
+    return render_template_string(ADMIN_LOGIN_TEMPLATE, error=error)
+
+
+@app.route('/admin')
+@admin_required
+def admin_dashboard():
+    groepen_json = json.dumps(GROEPEN, ensure_ascii=False)
+    r32_json = json.dumps(R32_STRUCTURE, ensure_ascii=False)
+    html = ADMIN_TEMPLATE.replace('%GROEPEN_JSON%', groepen_json)
+    html = html.replace('%R32_STRUCTURE_JSON%', r32_json)
+    html = html.replace('%IBAN%', IBAN)
+    html = html.replace('%INLEG%', str(INLEG))
+    return html
+
+
+@app.route('/admin/logout')
+def admin_logout():
+    session.pop('is_admin', None)
+    return redirect(url_for('index'))
+
+
+@app.route('/api/qr')
+def api_qr():
+    try:
+        naam = request.args.get('naam', '').strip()
+        if not naam:
+            return jsonify({"success": False, "error": "Naam vereist"})
+        communication = "WK2026 - " + naam
+        payload = generate_epc_payload(BEGUNSTIGDE, IBAN_CLEAN, INLEG, communication)
+        qr_b64 = generate_qr_image_base64(payload)
+        return jsonify({"success": True, "qr": qr_b64, "mededeling": communication})
+    except Exception as e:
