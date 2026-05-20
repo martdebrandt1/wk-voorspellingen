@@ -2013,3 +2013,142 @@ def api_qr():
         qr_b64 = generate_qr_image_base64(payload)
         return jsonify({"success": True, "qr": qr_b64, "mededeling": communication})
     except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route('/api/submit', methods=['POST'])
+def api_submit():
+    try:
+        data = request.get_json()
+        naam = data.get('naam', '').strip()
+        if not naam:
+            return jsonify({"success": False, "error": "Naam is verplicht"})
+        if not data.get('email', '').strip():
+            return jsonify({"success": False, "error": "Email is verplicht"})
+        if not data.get('relatie', '').strip():
+            return jsonify({"success": False, "error": "Relatie is verplicht"})
+        save_prediction(naam, data)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route('/api/predictions')
+def api_predictions():
+    return jsonify(load_data())
+
+
+@app.route('/api/public/results')
+def api_public_results():
+    return jsonify(load_results())
+
+
+@app.route('/api/scoreboard')
+def api_scoreboard():
+    predictions = load_data()
+    real_results = load_results()
+    players = []
+    for naam, pred in predictions.items():
+        points = calculate_points(pred, real_results)
+        players.append({
+            "naam": naam,
+            "kampioen": (pred.get("knockout") or {}).get("finale"),
+            "datum": pred.get("datum"),
+            "totaal_doelpunten": pred.get("totaal_doelpunten"),
+            "points": points
+        })
+
+    def sort_key(p):
+        diff = p["points"].get("schifting_diff")
+        diff_val = diff if diff is not None else 9999
+        return (-p["points"]["totaal"], diff_val)
+
+    players.sort(key=sort_key)
+    return jsonify({"players": players, "real_results": real_results})
+
+
+@app.route('/api/admin/results', methods=['GET'])
+@admin_required
+def api_admin_results_get():
+    return jsonify(load_results())
+
+
+@app.route('/api/admin/results/partial', methods=['POST'])
+@admin_required
+def api_admin_results_partial():
+    try:
+        data = request.get_json()
+        updated = update_results_partial(data)
+        return jsonify({"success": True, "results": updated})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route('/api/admin/results/clear', methods=['POST'])
+@admin_required
+def api_admin_results_clear():
+    try:
+        data = request.get_json()
+        section = data.get('section')
+        if not section:
+            return jsonify({"success": False, "error": "section vereist"})
+        updated = clear_results_section(section)
+        return jsonify({"success": True, "results": updated})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route('/api/admin/payments')
+@admin_required
+def api_admin_payments():
+    predictions = load_data()
+    players = []
+    for naam, pred in predictions.items():
+        players.append({
+            "naam": naam,
+            "email": pred.get("email", ""),
+            "relatie": pred.get("relatie", ""),
+            "datum": pred.get("datum", ""),
+            "totaal_doelpunten": pred.get("totaal_doelpunten"),
+        })
+    return jsonify({"players": players})
+
+
+@app.route('/api/admin/delete', methods=['POST'])
+@admin_required
+def api_admin_delete():
+    try:
+        data = request.get_json()
+        naam = data.get('naam', '').strip()
+        if not naam:
+            return jsonify({"success": False, "error": "naam vereist"})
+        delete_prediction(naam)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route('/api/admin/backup')
+@admin_required
+def api_admin_backup():
+    backup = {
+        "voorspellingen": load_data(),
+        "echte_resultaten": load_results(),
+        "exported_at": datetime.now().isoformat(),
+    }
+    response = Response(
+        json.dumps(backup, ensure_ascii=False, indent=2),
+        mimetype='application/json'
+    )
+    filename = "wk2026-backup-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".json"
+    response.headers['Content-Disposition'] = 'attachment; filename=' + filename
+    return response
+
+
+# ============================================================
+# RUN
+# ============================================================
+if __name__ == '__main__':
+    init_db()
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
