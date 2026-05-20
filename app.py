@@ -228,6 +228,24 @@ def update_results_partial(partial_data):
     return current
 
 
+def clear_results_section(section):
+    """Verwijder een specifieke sectie uit de resultaten."""
+    current = load_results()
+    if not current:
+        return {}
+    if section == 'groepsfase':
+        current.pop('groepsfase', None)
+    elif section == 'totaal_doelpunten':
+        current.pop('totaal_doelpunten', None)
+    elif section in ('ronde_van_32', 'ronde_van_16', 'kwartfinales', 'halve_finales', 'finale'):
+        if 'knockout' in current:
+            current['knockout'].pop(section, None)
+            if not current['knockout']:
+                current.pop('knockout', None)
+    save_results(current)
+    return current
+
+
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -420,7 +438,7 @@ h1 { text-align:center; font-size:2.5em; margin-bottom:10px; }
 <label for="player-goals">Schiftingsvraag: Hoeveel doelpunten op het hele WK? <span class="req">*</span></label>
 <div class="schifting-box">
 <h4>&#127943; Tiebreaker</h4>
-<p>Tel <strong>alle doelpunten</strong> die er gemaakt zullen worden tijdens het volledige WK 2026 (groepsfase + knock-out + finale). Bij gelijke punten op het scoreboard wint wie het dichtst bij het echte aantal zit!</p>
+<p>Tel <strong>alle doelpunten</strong> die er gemaakt zullen worden tijdens het volledige WK 2026 (groepsfase + knock-out + finale). Bij gelijke punten op het scoreboard wint wie het dichtst bij het echte aantal zit! <strong>Jouw antwoord blijft geheim</strong> voor andere deelnemers.</p>
 <input type="number" class="form-number" id="player-goals" placeholder="Bijv. 165" min="0" max="500">
 </div>
 </div>
@@ -991,7 +1009,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <span><strong>50pt</strong> halve finale winnaar</span>
 <span><strong>100pt</strong> wereldkampioen</span>
 </div>
-<p style="margin-top:8px;color:#bb8fce;font-size:0.85em;">&#127943; <strong>Tiebreaker:</strong> bij gelijke punten wint wie het dichtst bij het echte aantal doelpunten op het WK zit.</p>
+<p style="margin-top:8px;color:#bb8fce;font-size:0.85em;">&#127943; <strong>Tiebreaker:</strong> bij gelijke punten wint wie het dichtst bij het echte aantal doelpunten op het WK zit. Antwoorden van deelnemers blijven geheim tot na het toernooi.</p>
 </div>
 
 <div class="card">
@@ -1033,7 +1051,7 @@ Promise.all([
     if (!d.players || !d.players.length) { c.innerHTML = '<p>Nog geen voorspellingen.</p>'; return; }
     var hasGoals = realResults && realResults.totaal_doelpunten !== undefined && realResults.totaal_doelpunten !== null;
     var h = '<table class="leaderboard"><thead><tr><th>#</th><th style="text-align:left;">Speler</th><th>Kampioen</th><th class="hide-mobile">Groep</th><th class="hide-mobile">R32</th><th class="hide-mobile">R16</th><th class="hide-mobile">KF</th><th class="hide-mobile">HF</th><th class="hide-mobile">Win</th><th>TOTAAL</th>';
-    h += '<th class="hide-mobile">Goals</th>';
+    if (hasGoals) h += '<th class="hide-mobile">Tiebreaker (&Delta;)</th>';
     h += '</tr></thead><tbody>';
     for (var i = 0; i < d.players.length; i++) {
         var p = d.players[i];
@@ -1050,14 +1068,13 @@ Promise.all([
         h += '<td class="hide-mobile">' + p.points.sf + '</td>';
         h += '<td class="hide-mobile">' + p.points.winnaar + '</td>';
         h += '<td class="total">' + p.points.totaal + '</td>';
-        var goalsCell = '-';
-        if (p.totaal_doelpunten !== undefined && p.totaal_doelpunten !== null) {
-            goalsCell = p.totaal_doelpunten;
-            if (hasGoals && p.points.schifting_diff !== null && p.points.schifting_diff !== undefined) {
-                goalsCell += ' <span class="schifting">(&Delta;' + p.points.schifting_diff + ')</span>';
+        if (hasGoals) {
+            var goalsCell = '-';
+            if (p.points.schifting_diff !== null && p.points.schifting_diff !== undefined) {
+                goalsCell = '&Delta;' + p.points.schifting_diff;
             }
+            h += '<td class="hide-mobile schifting">' + goalsCell + '</td>';
         }
-        h += '<td class="hide-mobile schifting">' + goalsCell + '</td>';
         h += '</tr>';
     }
     h += '</tbody></table>';
@@ -1082,13 +1099,13 @@ function showPlayer(name) {
     var html = '<h2>&#128100; ' + escHtml(name) + '</h2>';
     html += '<p class="modal-info">Ingediend: <strong>' + (pred.datum || '?') + '</strong></p>';
 
-    if (pred.totaal_doelpunten !== undefined && pred.totaal_doelpunten !== null) {
-        html += '<div class="schifting-display">&#127943; <strong>Schiftingsvraag:</strong> ' + pred.totaal_doelpunten + ' doelpunten voorspeld';
-        if (realResults && realResults.totaal_doelpunten !== undefined && realResults.totaal_doelpunten !== null) {
-            var diff = Math.abs(parseInt(realResults.totaal_doelpunten,10) - parseInt(pred.totaal_doelpunten,10));
-            html += ' (echt: <strong>' + realResults.totaal_doelpunten + '</strong>, verschil: <strong>' + diff + '</strong>)';
-        }
-        html += '</div>';
+    // Schiftingsvraag NIET tonen aan andere deelnemers; enkel verschil als echte uitslag bekend is
+    if (realResults && realResults.totaal_doelpunten !== undefined && realResults.totaal_doelpunten !== null
+        && pred.totaal_doelpunten !== undefined && pred.totaal_doelpunten !== null) {
+        var diff = Math.abs(parseInt(realResults.totaal_doelpunten,10) - parseInt(pred.totaal_doelpunten,10));
+        html += '<div class="schifting-display">&#127943; <strong>Tiebreaker verschil:</strong> &Delta; ' + diff + ' doelpunten t.o.v. echte uitslag</div>';
+    } else {
+        html += '<div class="schifting-display">&#127943; <strong>Tiebreaker:</strong> antwoord op de schiftingsvraag is geheim tot de echte uitslag bekend is.</div>';
     }
 
     if (hasReal) {
@@ -1238,6 +1255,8 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 .btn-secondary { background:rgba(255,255,255,0.1); color:#fff; border:1px solid rgba(255,255,255,0.2); }
 .btn-danger { background:rgba(231,76,60,0.2); color:#e74c3c; border:1px solid #e74c3c; padding:6px 12px; font-size:0.85em; }
 .btn-danger:hover { background:#e74c3c; color:#fff; }
+.btn-warning { background:rgba(243,156,18,0.2); color:#f39c12; border:1px solid #f39c12; }
+.btn-warning:hover { background:#f39c12; color:#fff; }
 .btn-small { padding:8px 16px; font-size:0.9em; text-transform:none; }
 .btn:disabled { opacity:0.5; cursor:not-allowed; }
 .btn-group { display:flex; gap:12px; justify-content:center; margin-top:24px; flex-wrap:wrap; }
@@ -1325,7 +1344,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div class="card">
 <h2>&#9989; Echte Resultaten - Per Ronde Opslaan</h2>
 <div class="intro-info">
-<strong>&#128161; Werkwijze:</strong> Vul tussentijds resultaten in zodra een ronde is afgelopen. Elke sectie heeft een eigen <strong>"Opslaan"</strong> knop. Het scoreboard wordt direct bijgewerkt na elke save.
+<strong>&#128161; Werkwijze:</strong> Vul tussentijds resultaten in zodra een ronde is afgelopen. Elke sectie heeft een eigen <strong>"Opslaan"</strong> en <strong>"Wissen"</strong> knop. Het scoreboard wordt direct bijgewerkt na elke save.
 </div>
 
 <!-- Groepsfase -->
@@ -1335,6 +1354,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div class="group-grid" id="admin-groups-container"></div>
 <div class="btn-group" style="justify-content:flex-start;">
 <button class="btn btn-success btn-small" id="save-groepsfase">&#128190; Groepsfase Opslaan</button>
+<button class="btn btn-warning btn-small" data-clear="groepsfase">&#128465; Wissen</button>
 </div>
 <div class="status-msg hidden" id="status-msg-groepsfase"></div>
 </div>
@@ -1346,6 +1366,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div id="r32-container">Vul eerst de groepsfase in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-r32-row">
 <button class="btn btn-success btn-small" id="save-r32" disabled>&#128190; R32 Opslaan</button>
+<button class="btn btn-warning btn-small" data-clear="ronde_van_32">&#128465; Wissen</button>
 </div>
 <div class="status-msg hidden" id="status-msg-r32"></div>
 </div>
@@ -1357,6 +1378,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div id="r16-container">Vul eerst R32 in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-r16-row">
 <button class="btn btn-success btn-small" id="save-r16" disabled>&#128190; R16 Opslaan</button>
+<button class="btn btn-warning btn-small" data-clear="ronde_van_16">&#128465; Wissen</button>
 </div>
 <div class="status-msg hidden" id="status-msg-r16"></div>
 </div>
@@ -1368,6 +1390,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div id="qf-container">Vul eerst R16 in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-qf-row">
 <button class="btn btn-success btn-small" id="save-qf" disabled>&#128190; Kwartfinales Opslaan</button>
+<button class="btn btn-warning btn-small" data-clear="kwartfinales">&#128465; Wissen</button>
 </div>
 <div class="status-msg hidden" id="status-msg-qf"></div>
 </div>
@@ -1379,6 +1402,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div id="sf-container">Vul eerst kwartfinales in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-sf-row">
 <button class="btn btn-success btn-small" id="save-sf" disabled>&#128190; Halve Finales Opslaan</button>
+<button class="btn btn-warning btn-small" data-clear="halve_finales">&#128465; Wissen</button>
 </div>
 <div class="status-msg hidden" id="status-msg-sf"></div>
 </div>
@@ -1390,6 +1414,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div id="finale-container">Vul eerst halve finales in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-finale-row">
 <button class="btn btn-success btn-small" id="save-finale" disabled>&#128190; Kampioen Opslaan</button>
+<button class="btn btn-warning btn-small" data-clear="finale">&#128465; Wissen</button>
 </div>
 <div class="status-msg hidden" id="status-msg-finale"></div>
 </div>
@@ -1401,6 +1426,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
 <input type="number" class="goals-input" id="real-goals" placeholder="Bijv. 165" min="0" max="500">
 <button class="btn btn-success btn-small" id="save-goals">&#128190; Doelpunten Opslaan</button>
+<button class="btn btn-warning btn-small" data-clear="totaal_doelpunten">&#128465; Wissen</button>
 </div>
 <div class="status-msg hidden" id="status-msg-goals"></div>
 </div>
@@ -1531,7 +1557,7 @@ function showStatus(elId, msg, ok) {
 function setSectionStatus(id, filled) {
     var el = document.getElementById('status-' + id);
     if (!el) return;
-    if (filled) { el.className = 'status saved'; el.textContent = '&#10003; Opgeslagen'.replace('&#10003;', '\u2713'); el.textContent = '\u2713 Opgeslagen'; }
+    if (filled) { el.className = 'status saved'; el.textContent = '\u2713 Opgeslagen'; }
     else { el.className = 'status empty'; el.textContent = 'Niet ingevuld'; }
 }
 
@@ -1554,21 +1580,12 @@ document.getElementById('save-groepsfase').addEventListener('click', function() 
 
 // ============ TEAM SELECTOR (R32, R16, QF, SF, FINALE) ============
 function getAvailableTeams(round) {
-    // For r32: all 32 qualifying teams (top 2 of each group + 8 best thirds)
-    // For r16: all teams selected in r32
-    // For qf: all teams selected in r16
-    // For sf: all teams selected in qf
-    // For finale: all teams selected in sf
     if (round === 'r32') {
         var teams = [];
         var groups = Object.keys(GROEPEN);
         for (var i = 0; i < groups.length; i++) {
             var g = groups[i];
             var stand = (currentResults.groepsfase || {})[g] || [];
-            // Add top 2 + 3rd (we present all 4 ranks 1, 2 and 3 since the admin needs to pick 16 from these)
-            // Actually for R32 we have 32 teams: 12 winners + 12 runners-up + 8 best thirds = 32
-            // So we show top 3 of each group (36 teams) en de admin vinkt de 16 aan die R32 winnen
-            // Wait - R32 BEREIKEN = alle 32 teams. We willen welke 16 doorgaan naar R16
             for (var k = 0; k < 3 && k < stand.length; k++) {
                 if (stand[k]) teams.push({ name: stand[k], group: g, pos: k+1 });
             }
@@ -1594,8 +1611,6 @@ function getAvailableTeams(round) {
 
 function renderTeamSelector(round, max) {
     var containerId = round + '-container';
-    var counterId = 'counter-' + round;
-    var saveBtn = document.getElementById('save-' + round);
     var saveRow = document.getElementById('save-' + round + '-row');
     var c = document.getElementById(containerId);
     var teams = getAvailableTeams(round);
@@ -1606,7 +1621,6 @@ function renderTeamSelector(round, max) {
     }
     if (saveRow) saveRow.classList.remove('hidden');
 
-    // Pre-fill from currentResults
     var preSelected = {};
     var koMap = { r32: 'ronde_van_32', r16: 'ronde_van_16', qf: 'kwartfinales', sf: 'halve_finales', finale: 'finale' };
     var existing = (currentResults.knockout || {})[koMap[round]];
@@ -1676,9 +1690,7 @@ function saveRound(round, max, koKey) {
         alert('Selecteer exact ' + max + ' teams!');
         return;
     }
-    var koObj = {};
     if (round === 'finale') {
-        // Send as single string
         var payload = { knockout: {} };
         payload.knockout[koKey] = sel[0];
         fetch('/api/admin/results/partial', {
@@ -1695,6 +1707,7 @@ function saveRound(round, max, koKey) {
         });
         return;
     }
+    var koObj = {};
     for (var i = 0; i < sel.length; i++) koObj[i] = sel[i];
     var payload = { knockout: {} };
     payload.knockout[koKey] = koObj;
@@ -1707,7 +1720,6 @@ function saveRound(round, max, koKey) {
             if (!currentResults.knockout) currentResults.knockout = {};
             currentResults.knockout[koKey] = koObj;
             setSectionStatus(round, true);
-            // Render next round selector
             var nextMap = { r32: ['r16', 8], r16: ['qf', 4], qf: ['sf', 2], sf: ['finale', 1] };
             if (nextMap[round]) {
                 renderTeamSelector(nextMap[round][0], nextMap[round][1]);
@@ -1740,6 +1752,82 @@ document.getElementById('save-goals').addEventListener('click', function() {
             setSectionStatus('goals', true);
             loadAdminLeaderboard();
         } else showStatus('status-msg-goals', 'Fout: ' + res.error, false);
+    });
+});
+
+// ============ CLEAR HANDLERS ============
+document.addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-clear]');
+    if (!btn) return;
+    var section = btn.getAttribute('data-clear');
+    var labels = {
+        'groepsfase': 'groepsfase',
+        'ronde_van_32': '1/16 finales (R32)',
+        'ronde_van_16': '1/8 finales (R16)',
+        'kwartfinales': 'kwartfinales',
+        'halve_finales': 'halve finales',
+        'finale': 'wereldkampioen',
+        'totaal_doelpunten': 'doelpunten (schiftingsvraag)'
+    };
+    if (!confirm('Weet je zeker dat je de "' + (labels[section] || section) + '" wilt wissen? Dit kan niet ongedaan gemaakt worden.')) return;
+    fetch('/api/admin/results/clear', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ section: section })
+    }).then(function(r){return r.json();}).then(function(res) {
+        if (!res.success) {
+            alert('Fout: ' + res.error);
+            return;
+        }
+        currentResults = res.results || {};
+        var statusMap = {
+            'groepsfase': 'groepsfase',
+            'ronde_van_32': 'r32',
+            'ronde_van_16': 'r16',
+            'kwartfinales': 'qf',
+            'halve_finales': 'sf',
+            'finale': 'finale',
+            'totaal_doelpunten': 'goals'
+        };
+        var sId = statusMap[section];
+        if (sId) setSectionStatus(sId, false);
+
+        if (section === 'groepsfase') {
+            adminBuildGroups();
+            ['r32','r16','qf','sf','finale'].forEach(function(rd){
+                var el = document.getElementById(rd + '-container');
+                if (el) el.innerHTML = '<p style="color:#888;">Vul eerst de vorige ronde in &amp; sla op.</p>';
+                var row = document.getElementById('save-' + rd + '-row');
+                if (row) row.classList.add('hidden');
+                teamSelections[rd] = {};
+                setSectionStatus(rd, false);
+            });
+        } else if (section === 'totaal_doelpunten') {
+            document.getElementById('real-goals').value = '';
+        } else {
+            var order = ['ronde_van_32','ronde_van_16','kwartfinales','halve_finales','finale'];
+            var rdMap = {'ronde_van_32':'r32','ronde_van_16':'r16','kwartfinales':'qf','halve_finales':'sf','finale':'finale'};
+            var maxMap = {'r32':16,'r16':8,'qf':4,'sf':2,'finale':1};
+            var idx = order.indexOf(section);
+            // Clear deze + alle volgende rondes
+            for (var i = idx; i < order.length; i++) {
+                var rd = rdMap[order[i]];
+                teamSelections[rd] = {};
+                setSectionStatus(rd, false);
+                if (i > idx) {
+                    var el = document.getElementById(rd + '-container');
+                    if (el) el.innerHTML = '<p style="color:#888;">Vul eerst de vorige ronde in &amp; sla op.</p>';
+                    var row = document.getElementById('save-' + rd + '-row');
+                    if (row) row.classList.add('hidden');
+                }
+            }
+            // Re-render de gewiste ronde zelf (zodat selectie leeg toont) als previous nog beschikbaar is
+            var thisRd = rdMap[section];
+            if (thisRd && getAvailableTeams(thisRd).length) {
+                renderTeamSelector(thisRd, maxMap[thisRd]);
+            }
+        }
+        loadAdminLeaderboard();
+        showStatus('status-msg-' + (statusMap[section] || 'groepsfase'), '\u2713 ' + (labels[section] || section) + ' gewist!', true);
     });
 });
 
@@ -1863,7 +1951,6 @@ function loadCurrentResults() {
     fetch('/api/admin/results').then(function(r){return r.json();}).then(function(d) {
         currentResults = d || {};
         adminBuildGroups();
-        // Update statuses
         if (currentResults.groepsfase && Object.keys(currentResults.groepsfase).length === 12) {
             setSectionStatus('groepsfase', true);
             renderTeamSelector('r32', 16);
@@ -1881,226 +1968,3 @@ function loadCurrentResults() {
             setSectionStatus('qf', true);
             renderTeamSelector('sf', 2);
         }
-        if (ko.halve_finales && Object.keys(ko.halve_finales).length === 2) {
-            setSectionStatus('sf', true);
-            renderTeamSelector('finale', 1);
-        }
-        if (ko.finale) {
-            setSectionStatus('finale', true);
-        }
-        if (currentResults.totaal_doelpunten !== undefined && currentResults.totaal_doelpunten !== null) {
-            setSectionStatus('goals', true);
-            document.getElementById('real-goals').value = currentResults.totaal_doelpunten;
-        }
-    });
-}
-
-loadCurrentResults();
-loadParticipants();
-loadAdminLeaderboard();
-loadAllPredictions();
-})();
-</script>
-</body></html>
-"""
-
-
-# ============================================================
-# ROUTES
-# ============================================================
-
-@app.route('/')
-def index():
-    groepen_json = json.dumps(GROEPEN, ensure_ascii=False)
-    r32_json = json.dumps(R32_STRUCTURE, ensure_ascii=False)
-    html = HTML_TEMPLATE.replace('%GROEPEN_JSON%', groepen_json)
-    html = html.replace('%R32_STRUCTURE_JSON%', r32_json)
-    html = html.replace('%IBAN%', IBAN)
-    html = html.replace('%INLEG%', str(INLEG))
-    return html
-
-
-@app.route('/scoreboard')
-def scoreboard():
-    return render_template_string(SCOREBOARD_TEMPLATE)
-
-
-@app.route('/admin/login', methods=['GET', 'POST'])
-def admin_login():
-    error = None
-    if request.method == 'POST':
-        if request.form.get('password', '') == ADMIN_PASSWORD:
-            session['is_admin'] = True
-            return redirect(url_for('admin_dashboard'))
-        error = "Onjuist wachtwoord!"
-    return render_template_string(ADMIN_LOGIN_TEMPLATE, error=error)
-
-
-@app.route('/admin')
-@admin_required
-def admin_dashboard():
-    groepen_json = json.dumps(GROEPEN, ensure_ascii=False)
-    r32_json = json.dumps(R32_STRUCTURE, ensure_ascii=False)
-    html = ADMIN_TEMPLATE.replace('%GROEPEN_JSON%', groepen_json)
-    html = html.replace('%R32_STRUCTURE_JSON%', r32_json)
-    html = html.replace('%IBAN%', IBAN)
-    html = html.replace('%INLEG%', str(INLEG))
-    return html
-
-
-@app.route('/admin/logout')
-def admin_logout():
-    session.pop('is_admin', None)
-    return redirect(url_for('index'))
-
-
-@app.route('/api/qr')
-def api_qr():
-    try:
-        naam = request.args.get('naam', '').strip()
-        if not naam:
-            return jsonify({"success": False, "error": "Naam vereist"})
-        communication = "WK2026 - " + naam
-        payload = generate_epc_payload(BEGUNSTIGDE, IBAN_CLEAN, INLEG, communication)
-        qr_b64 = generate_qr_image_base64(payload)
-        return jsonify({"success": True, "qr": qr_b64, "mededeling": communication})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-
-@app.route('/api/submit', methods=['POST'])
-def submit():
-    try:
-        data = request.get_json()
-        naam = data.get('naam', '').strip()
-        if not naam:
-            return jsonify({"success": False, "error": "Naam is verplicht"})
-        save_prediction(naam, data)
-        set_paid_status(naam, True)
-        return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-
-@app.route('/api/predictions', methods=['GET'])
-def get_predictions():
-    return jsonify(load_data())
-
-
-@app.route('/api/public/results', methods=['GET'])
-def public_results():
-    return jsonify(load_results())
-
-
-@app.route('/api/scoreboard', methods=['GET'])
-def get_scoreboard():
-    all_predictions = load_data()
-    real_results = load_results()
-    players = []
-    for naam, pred in all_predictions.items():
-        points = calculate_points(pred, real_results)
-        kampioen = pred.get('knockout', {}).get('finale', '?')
-        players.append({
-            "naam": naam,
-            "kampioen": kampioen,
-            "points": points,
-            "totaal_doelpunten": pred.get('totaal_doelpunten')
-        })
-    # Sort: first by total points (desc), then by smallest schifting_diff (asc, None last)
-    def sort_key(x):
-        diff = x["points"].get("schifting_diff")
-        if diff is None:
-            diff = float('inf')
-        return (-x["points"]["totaal"], diff)
-    players.sort(key=sort_key)
-    return jsonify({
-        "players": players,
-        "results_available": bool(real_results and real_results.get("groepsfase"))
-    })
-
-
-@app.route('/api/admin/payments', methods=['GET'])
-@admin_required
-def admin_payments():
-    all_data = load_data()
-    players = []
-    for naam, pred in all_data.items():
-        players.append({
-            "naam": naam,
-            "email": pred.get('email', ''),
-            "relatie": pred.get('relatie', ''),
-            "datum": pred.get('datum', '?'),
-            "kampioen": pred.get('knockout', {}).get('finale', '?'),
-            "totaal_doelpunten": pred.get('totaal_doelpunten')
-        })
-    return jsonify({"players": players})
-
-
-@app.route('/api/admin/delete', methods=['POST'])
-def admin_delete():
-    if not session.get('is_admin'):
-        return jsonify({"success": False, "error": "Niet geautoriseerd"})
-    try:
-        data = request.get_json()
-        naam = data.get('naam', '').strip()
-        if not naam:
-            return jsonify({"success": False, "error": "Naam is verplicht"})
-        delete_prediction(naam)
-        return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-
-@app.route('/api/admin/results', methods=['GET', 'POST'])
-def admin_results():
-    if request.method == 'GET':
-        return jsonify(load_results())
-    if not session.get('is_admin'):
-        return jsonify({"success": False, "error": "Niet geautoriseerd"})
-    try:
-        data = request.get_json()
-        save_results(data)
-        return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-
-@app.route('/api/admin/results/partial', methods=['POST'])
-def admin_results_partial():
-    """Update slechts een deel van de resultaten (per ronde)."""
-    if not session.get('is_admin'):
-        return jsonify({"success": False, "error": "Niet geautoriseerd"})
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"success": False, "error": "Geen data ontvangen"})
-        updated = update_results_partial(data)
-        return jsonify({"success": True, "results": updated})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-
-@app.route('/api/admin/backup', methods=['GET'])
-@admin_required
-def admin_backup():
-    """Download alle data als JSON backup."""
-    backup = {
-        "voorspellingen": load_data(),
-        "resultaten": load_results(),
-        "timestamp": datetime.now().isoformat(),
-        "aantal_deelnemers": len(load_data())
-    }
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M")
-    filename = "wk2026-backup-" + timestamp + ".json"
-    return Response(
-        json.dumps(backup, ensure_ascii=False, indent=2),
-        mimetype='application/json',
-        headers={'Content-Disposition': 'attachment;filename=' + filename}
-    )
-
-
-init_db()
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
