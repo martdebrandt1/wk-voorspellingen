@@ -266,10 +266,8 @@ def calculate_points(prediction, real_results):
         for i, team in enumerate(pred_order):
             if i < len(real_order) and real_order[i] == team:
                 points["groep_positie"] += PUNTEN["groep_juiste_positie"]
-
     real_ko = real_results.get("knockout", {})
     pred_ko = prediction.get("knockout", {})
-
     for key, pk, pp in [("ronde_van_32","r32",PUNTEN["r32_juist"]),
                          ("ronde_van_16","r16",PUNTEN["r16_juist"]),
                          ("kwartfinales","qf",PUNTEN["qf_juist"]),
@@ -277,15 +275,12 @@ def calculate_points(prediction, real_results):
         rr = real_ko.get(key, {})
         pr = pred_ko.get(key, {})
         if rr and pr:
-            rw = set(rr.values()) if isinstance(rr, dict) else set()
-            pw = set(pr.values()) if isinstance(pr, dict) else set()
+            rw = set(rr.values()) if isinstance(rr,dict) else set()
+            pw = set(pr.values()) if isinstance(pr,dict) else set()
             points[pk] = len(rw & pw) * pp
-
     if real_ko.get("finale") and pred_ko.get("finale") == real_ko.get("finale"):
         points["winnaar"] = PUNTEN["winnaar_juist"]
-
     points["totaal"] = sum(points[k] for k in ["groep_positie","r32","r16","qf","sf","winnaar"])
-
     real_goals = real_results.get("totaal_doelpunten")
     pred_goals = prediction.get("totaal_doelpunten")
     if real_goals is not None and pred_goals is not None:
@@ -293,7 +288,6 @@ def calculate_points(prediction, real_results):
             points["schifting_diff"] = abs(int(real_goals) - int(pred_goals))
         except (ValueError, TypeError):
             points["schifting_diff"] = None
-
     return points
 
 
@@ -598,7 +592,7 @@ function goToStep(step) {
         buildKnockout();
     }
     if (step === 4) {
-        if (!knockoutSelections.final_round || !knockoutSelections.final_round[0]) {
+        if (!knockoutSelections.final_round || knockoutSelections.final_round[0] === undefined) {
             alert('Vul eerst alle knock-out wedstrijden in!');
             return;
         }
@@ -660,23 +654,12 @@ function initMoveButtons(list) {
 
 function initSortable(list) {
     var dragged = null;
-    list.addEventListener('dragstart', function(e) {
-        dragged = e.target.closest('li');
-        if (dragged) dragged.classList.add('dragging');
-    });
-    list.addEventListener('dragend', function() {
-        if (dragged) {
-            dragged.classList.remove('dragging');
-            dragged = null;
-            updatePositionBadges(list);
-        }
-    });
+    list.addEventListener('dragstart', function(e) { dragged = e.target.closest('li'); if (dragged) dragged.classList.add('dragging'); });
+    list.addEventListener('dragend', function() { if (dragged) { dragged.classList.remove('dragging'); dragged = null; updatePositionBadges(list); } });
     list.addEventListener('dragover', function(e) {
-        e.preventDefault();
-        if (!dragged) return;
+        e.preventDefault(); if (!dragged) return;
         var after = getDragAfter(list, e.clientY);
-        if (after == null) list.appendChild(dragged);
-        else list.insertBefore(dragged, after);
+        if (after == null) list.appendChild(dragged); else list.insertBefore(dragged, after);
     });
 }
 
@@ -685,10 +668,7 @@ function getDragAfter(c, y) {
     for (var i = 0; i < els.length; i++) {
         var box = els[i].getBoundingClientRect();
         var off = y - box.top - box.height / 2;
-        if (off < 0 && off > co) {
-            co = off;
-            closest = els[i];
-        }
+        if (off < 0 && off > co) { co = off; closest = els[i]; }
     }
     return closest;
 }
@@ -777,10 +757,7 @@ function confirmThirdAssignments() {
     var selects = document.querySelectorAll('.third-assign-select');
     thirdPlaceAssignments = {};
     for (var i = 0; i < selects.length; i++) {
-        if (!selects[i].value) {
-            alert('Wijs alle wedstrijden een #3 team toe!');
-            return;
-        }
+        if (!selects[i].value) { alert('Wijs alle wedstrijden een #3 team toe!'); return; }
         thirdPlaceAssignments[parseInt(selects[i].getAttribute('data-match'))] = selects[i].value;
     }
     document.getElementById('third-assignment').remove();
@@ -797,9 +774,7 @@ function buildR32Matches() {
         if (m.slot2.type === 'third') {
             var ag = thirdPlaceAssignments[i];
             t2 = ag ? groupPredictions[ag][2] : 'TBD';
-        } else {
-            t2 = resolveTeam(m.slot2);
-        }
+        } else { t2 = resolveTeam(m.slot2); }
         matches.push({ team1: t1, team2: t2 });
     }
     renderRound(container, '1/32 Finales', matches, 'r32');
@@ -824,9 +799,7 @@ function renderRound(container, title, matches, roundKey) {
     for (var t = 0; t < teamDivs.length; t++) teamDivs[t].addEventListener('click', handleMatchClick);
 }
 
-function esc(s) {
-    return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function handleMatchClick(e) {
     var el = e.currentTarget;
@@ -844,7 +817,15 @@ function buildNextRound(rk) {
     var container = document.getElementById('knockout-container');
     var counts = { r32: 16, r16: 8, qf: 4, sf: 2, final_round: 1 };
     var nexts = { r32: 'r16', r16: 'qf', qf: 'sf', sf: 'final_round' };
-    var names = { r32: '1/16 Finales', r16: 'Kwartfinales', qf: 'Halve Finales', sf: '&#127942; FINALE' };
+
+    /* ENKEL TITELS GECORRIGEERD */
+    var names = {
+        r32: '1/16 Finales',
+        r16: '1/8 Finales',
+        qf: 'Kwartfinales',
+        sf: '&#127942; FINALE'
+    };
+
     if (Object.keys(knockoutSelections[rk]).length < counts[rk]) return;
     var nk = nexts[rk];
     if (!nk) return;
@@ -873,14 +854,11 @@ document.addEventListener('click', function(e) {
     if (targetId === 'iban-text') text = '%IBAN%';
     else if (targetId === 'mededeling-text') text = 'WK2026 - ' + document.getElementById('player-name').value.trim();
     if (navigator.clipboard) {
-        navigator.clipboard.writeText(text).then(function() {
+        navigator.clipboard.writeText(text).then(function(){
             btn.classList.add('copied');
             var oldHtml = btn.innerHTML;
             btn.innerHTML = '&#10003; Gekopieerd';
-            setTimeout(function() {
-                btn.classList.remove('copied');
-                btn.innerHTML = oldHtml;
-            }, 2000);
+            setTimeout(function(){ btn.classList.remove('copied'); btn.innerHTML = oldHtml; }, 2000);
         });
     }
 });
@@ -903,12 +881,7 @@ function submitPrediction() {
     var relation = document.getElementById('player-relation').value.trim();
     var goals = parseInt(document.getElementById('player-goals').value, 10);
     if (!document.getElementById('payment-confirm').checked) {
-        alert('Bevestig eerst de betaling!');
-        return;
-    }
-    if (!knockoutSelections.final_round || !knockoutSelections.final_round[0]) {
-        alert('Finale is nog niet ingevuld.');
-        return;
+        alert('Bevestig eerst de betaling!'); return;
     }
     var derdes = [];
     for (var k in thirdPlaceAssignments) {
@@ -924,27 +897,19 @@ function submitPrediction() {
         beste_derdes: derdes,
         third_assignments: thirdPlaceAssignments,
         knockout: {
-            ronde_van_32: knockoutSelections.r32,
-            ronde_van_16: knockoutSelections.r16,
-            kwartfinales: knockoutSelections.qf,
-            halve_finales: knockoutSelections.sf,
+            ronde_van_32: knockoutSelections.r32, ronde_van_16: knockoutSelections.r16,
+            kwartfinales: knockoutSelections.qf, halve_finales: knockoutSelections.sf,
             finale: knockoutSelections.final_round[0]
         }
     };
-    fetch('/api/submit', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(data)
-    })
+    fetch('/api/submit', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) })
     .then(function(r) { return r.json(); })
     .then(function(res) {
         if (res.success) {
             document.getElementById('confirm-name').textContent = name;
             document.getElementById('confirm-champion').textContent = knockoutSelections.final_round[0];
             goToStep(5);
-        } else {
-            alert('Fout: ' + res.error);
-        }
+        } else alert('Fout: ' + res.error);
     });
 }
 
@@ -956,9 +921,7 @@ document.getElementById('btn-next-3').addEventListener('click', function() { goT
 document.getElementById('btn-back-4').addEventListener('click', function() { goToStep(3); });
 document.getElementById('btn-submit').addEventListener('click', submitPrediction);
 ['player-name','player-email','player-relation','player-goals'].forEach(function(id){
-    document.getElementById(id).addEventListener('input', function() {
-        document.getElementById('form-error').classList.remove('show');
-    });
+    document.getElementById(id).addEventListener('input', function() { document.getElementById('form-error').classList.remove('show'); });
 });
 
 buildGroups();
@@ -1043,8 +1006,8 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <span><strong>3pt</strong> juiste positie in groep</span>
 <span><strong>10pt</strong> 1/32 finale winnaar</span>
 <span><strong>20pt</strong> 1/16 finale winnaar</span>
-<span><strong>30pt</strong> kwartfinale winnaar</span>
-<span><strong>50pt</strong> halve finale winnaar</span>
+<span><strong>30pt</strong> 1/8 finale winnaar</span>
+<span><strong>50pt</strong> kwartfinale winnaar</span>
 <span><strong>100pt</strong> wereldkampioen</span>
 </div>
 <p style="margin-top:8px;color:#bb8fce;font-size:0.85em;">&#127943; <strong>Tiebreaker:</strong> bij gelijke punten wint wie het dichtst bij het echte aantal doelpunten zit. Antwoorden van deelnemers blijven geheim tot na het toernooi.</p>
@@ -1086,10 +1049,7 @@ Promise.all([
     }
     sb.innerHTML = statsHtml;
 
-    if (!d.players || !d.players.length) {
-        c.innerHTML = '<p>Nog geen voorspellingen.</p>';
-        return;
-    }
+    if (!d.players || !d.players.length) { c.innerHTML = '<p>Nog geen voorspellingen.</p>'; return; }
     var hasGoals = realResults && realResults.totaal_doelpunten !== undefined && realResults.totaal_doelpunten !== null;
     var h = '<table class="leaderboard"><thead><tr><th>#</th><th style="text-align:left;">Speler</th><th>Kampioen</th><th class="hide-mobile">Groep</th><th class="hide-mobile">R32</th><th class="hide-mobile">R16</th><th class="hide-mobile">KF</th><th class="hide-mobile">HF</th><th class="hide-mobile">Win</th><th>TOTAAL</th>';
     if (hasGoals) h += '<th class="hide-mobile">Tiebreaker (&Delta;)</th>';
@@ -1177,8 +1137,8 @@ function showPlayer(name) {
     var rounds = [
         { key: 'ronde_van_32', name: '&#127919; 1/32 Finales (R32)' },
         { key: 'ronde_van_16', name: '&#127919; 1/16 Finales (R16)' },
-        { key: 'kwartfinales', name: '&#127919; Kwartfinales' },
-        { key: 'halve_finales', name: '&#127919; Halve Finales' }
+        { key: 'kwartfinales', name: '&#127919; 1/8 Finales' },
+        { key: 'halve_finales', name: '&#127919; Kwartfinales' }
     ];
     for (var r = 0; r < rounds.length; r++) {
         var rd = rounds[r];
@@ -1405,7 +1365,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 
 <div class="results-section">
 <h3>&#127919; 3. 1/16 Finales <span id="status-r16" class="status empty">Niet ingevuld</span> <span id="counter-r16" class="counter-badge">0/8</span></h3>
-<p class="drag-hint">Vink de 8 teams aan die de kwartfinales bereiken.</p>
+<p class="drag-hint">Vink de 8 teams aan die de 1/8 finales bereiken.</p>
 <div id="r16-container">Vul eerst R32 in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-r16-row">
 <button class="btn btn-success btn-small" id="save-r16" disabled>&#128190; R16 Opslaan</button>
@@ -1415,22 +1375,22 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 </div>
 
 <div class="results-section">
-<h3>&#127919; 4. Kwartfinales <span id="status-qf" class="status empty">Niet ingevuld</span> <span id="counter-qf" class="counter-badge">0/4</span></h3>
-<p class="drag-hint">Vink de 4 teams aan die de halve finales bereiken.</p>
+<h3>&#127919; 4. 1/8 Finales <span id="status-qf" class="status empty">Niet ingevuld</span> <span id="counter-qf" class="counter-badge">0/4</span></h3>
+<p class="drag-hint">Vink de 4 teams aan die de kwartfinales bereiken.</p>
 <div id="qf-container">Vul eerst R16 in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-qf-row">
-<button class="btn btn-success btn-small" id="save-qf" disabled>&#128190; Kwartfinales Opslaan</button>
+<button class="btn btn-success btn-small" id="save-qf" disabled>&#128190; 1/8 Finales Opslaan</button>
 <button class="btn btn-warning btn-small" data-clear="kwartfinales">&#128465; Wissen</button>
 </div>
 <div class="status-msg hidden" id="status-msg-qf"></div>
 </div>
 
 <div class="results-section">
-<h3>&#127919; 5. Halve Finales <span id="status-sf" class="status empty">Niet ingevuld</span> <span id="counter-sf" class="counter-badge">0/2</span></h3>
+<h3>&#127919; 5. Kwartfinales <span id="status-sf" class="status empty">Niet ingevuld</span> <span id="counter-sf" class="counter-badge">0/2</span></h3>
 <p class="drag-hint">Vink de 2 finalisten aan.</p>
-<div id="sf-container">Vul eerst kwartfinales in &amp; sla op.</div>
+<div id="sf-container">Vul eerst 1/8 finales in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-sf-row">
-<button class="btn btn-success btn-small" id="save-sf" disabled>&#128190; Halve Finales Opslaan</button>
+<button class="btn btn-success btn-small" id="save-sf" disabled>&#128190; Kwartfinales Opslaan</button>
 <button class="btn btn-warning btn-small" data-clear="halve_finales">&#128465; Wissen</button>
 </div>
 <div class="status-msg hidden" id="status-msg-sf"></div>
@@ -1439,7 +1399,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div class="results-section">
 <h3>&#127942; 6. Wereldkampioen <span id="status-finale" class="status empty">Niet ingevuld</span></h3>
 <p class="drag-hint">Selecteer de wereldkampioen.</p>
-<div id="finale-container">Vul eerst halve finales in &amp; sla op.</div>
+<div id="finale-container">Vul eerst kwartfinales in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-finale-row">
 <button class="btn btn-success btn-small" id="save-finale" disabled>&#128190; Kampioen Opslaan</button>
 <button class="btn btn-warning btn-small" data-clear="finale">&#128465; Wissen</button>
@@ -1514,17 +1474,14 @@ function adminBuildGroups() {
         card.innerHTML = html;
         c.appendChild(card);
         var list = card.querySelector('.sortable-list');
-        initSortable(list);
-        initMoveButtons(list);
+        initSortable(list); initMoveButtons(list);
     }
 }
 
 function initMoveButtons(list) {
     list.addEventListener('click', function(e) {
-        var btn = e.target.closest('.move-btn');
-        if (!btn) return;
-        e.preventDefault();
-        e.stopPropagation();
+        var btn = e.target.closest('.move-btn'); if (!btn) return;
+        e.preventDefault(); e.stopPropagation();
         var li = btn.closest('li'), dir = btn.getAttribute('data-dir');
         if (dir === 'up' && li.previousElementSibling) list.insertBefore(li, li.previousElementSibling);
         else if (dir === 'down' && li.nextElementSibling) list.insertBefore(li.nextElementSibling, li);
@@ -1534,23 +1491,12 @@ function initMoveButtons(list) {
 
 function initSortable(list) {
     var d = null;
-    list.addEventListener('dragstart', function(e) {
-        d = e.target.closest('li');
-        if (d) d.classList.add('dragging');
-    });
-    list.addEventListener('dragend', function() {
-        if (d) {
-            d.classList.remove('dragging');
-            d = null;
-            updatePositionBadges(list);
-        }
-    });
+    list.addEventListener('dragstart', function(e) { d = e.target.closest('li'); if (d) d.classList.add('dragging'); });
+    list.addEventListener('dragend', function() { if (d) { d.classList.remove('dragging'); d = null; updatePositionBadges(list); } });
     list.addEventListener('dragover', function(e) {
-        e.preventDefault();
-        if (!d) return;
+        e.preventDefault(); if (!d) return;
         var a = getDragAfter(list, e.clientY);
-        if (a == null) list.appendChild(d);
-        else list.insertBefore(d, a);
+        if (a == null) list.appendChild(d); else list.insertBefore(d, a);
     });
 }
 
@@ -1559,10 +1505,7 @@ function getDragAfter(c, y) {
     for (var i = 0; i < els.length; i++) {
         var b = els[i].getBoundingClientRect();
         var o = y - b.top - b.height / 2;
-        if (o < 0 && o > co) {
-            co = o;
-            cl = els[i];
-        }
+        if (o < 0 && o > co) { co = o; cl = els[i]; }
     }
     return cl;
 }
@@ -1601,20 +1544,14 @@ function showStatus(elId, msg, ok) {
 function setSectionStatus(id, filled) {
     var el = document.getElementById('status-' + id);
     if (!el) return;
-    if (filled) {
-        el.className = 'status saved';
-        el.textContent = '\u2713 Opgeslagen';
-    } else {
-        el.className = 'status empty';
-        el.textContent = 'Niet ingevuld';
-    }
+    if (filled) { el.className = 'status saved'; el.textContent = '\u2713 Opgeslagen'; }
+    else { el.className = 'status empty'; el.textContent = 'Niet ingevuld'; }
 }
 
 document.getElementById('save-groepsfase').addEventListener('click', function() {
     var data = adminGetGroupResults();
     fetch('/api/admin/results/partial', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ groepsfase: data })
     }).then(function(r){return r.json();}).then(function(res) {
         if (res.success) {
@@ -1624,9 +1561,7 @@ document.getElementById('save-groepsfase').addEventListener('click', function() 
             setSectionStatus('groepsfase', true);
             renderTeamSelector('r32', 16);
             loadAdminLeaderboard();
-        } else {
-            showStatus('status-msg-groepsfase', 'Fout: ' + res.error, false);
-        }
+        } else showStatus('status-msg-groepsfase', 'Fout: ' + res.error, false);
     });
 });
 
@@ -1743,8 +1678,7 @@ function saveRound(round, max, koKey) {
         var payload = { knockout: {} };
         payload.knockout[koKey] = sel[0];
         fetch('/api/admin/results/partial', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
+            method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify(payload)
         }).then(function(r){return r.json();}).then(function(res){
             if (res.success) {
@@ -1753,9 +1687,7 @@ function saveRound(round, max, koKey) {
                 currentResults.knockout[koKey] = sel[0];
                 setSectionStatus(round, true);
                 loadAdminLeaderboard();
-            } else {
-                showStatus('status-msg-' + round, 'Fout: ' + res.error, false);
-            }
+            } else showStatus('status-msg-' + round, 'Fout: ' + res.error, false);
         });
         return;
     }
@@ -1764,8 +1696,7 @@ function saveRound(round, max, koKey) {
     var payload = { knockout: {} };
     payload.knockout[koKey] = koObj;
     fetch('/api/admin/results/partial', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
+        method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify(payload)
     }).then(function(r){return r.json();}).then(function(res) {
         if (res.success) {
@@ -1778,9 +1709,7 @@ function saveRound(round, max, koKey) {
                 renderTeamSelector(nextMap[round][0], nextMap[round][1]);
             }
             loadAdminLeaderboard();
-        } else {
-            showStatus('status-msg-' + round, 'Fout: ' + res.error, false);
-        }
+        } else showStatus('status-msg-' + round, 'Fout: ' + res.error, false);
     });
 }
 
@@ -1798,8 +1727,7 @@ document.getElementById('save-goals').addEventListener('click', function() {
         return;
     }
     fetch('/api/admin/results/partial', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
+        method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ totaal_doelpunten: n })
     }).then(function(r){return r.json();}).then(function(res){
         if (res.success) {
@@ -1807,9 +1735,7 @@ document.getElementById('save-goals').addEventListener('click', function() {
             currentResults.totaal_doelpunten = n;
             setSectionStatus('goals', true);
             loadAdminLeaderboard();
-        } else {
-            showStatus('status-msg-goals', 'Fout: ' + res.error, false);
-        }
+        } else showStatus('status-msg-goals', 'Fout: ' + res.error, false);
     });
 });
 
@@ -1821,15 +1747,14 @@ document.addEventListener('click', function(e) {
         'groepsfase': 'groepsfase',
         'ronde_van_32': '1/32 finales (R32)',
         'ronde_van_16': '1/16 finales (R16)',
-        'kwartfinales': 'kwartfinales',
-        'halve_finales': 'halve finales',
+        'kwartfinales': '1/8 finales',
+        'halve_finales': 'kwartfinales',
         'finale': 'wereldkampioen',
         'totaal_doelpunten': 'doelpunten (schiftingsvraag)'
     };
     if (!confirm('Weet je zeker dat je "' + (labels[section] || section) + '" wilt wissen?')) return;
     fetch('/api/admin/results/clear', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ section: section })
     }).then(function(r){return r.json();}).then(function(res) {
         if (!res.success) {
@@ -1907,10 +1832,7 @@ function renderSummary() {
 
 function renderParticipantsList(list) {
     var c = document.getElementById('participants-container');
-    if (!list.length) {
-        c.innerHTML = '<p style="color:#aaa;">Nog geen deelnemers.</p>';
-        return;
-    }
+    if (!list.length) { c.innerHTML = '<p style="color:#aaa;">Nog geen deelnemers.</p>'; return; }
     list.sort(function(a,b){ return (a.datum || '').localeCompare(b.datum || ''); });
     var h = '<ul class="participants-list">';
     for (var i = 0; i < list.length; i++) {
@@ -1936,19 +1858,10 @@ function renderParticipantsList(list) {
         delBtns[i].addEventListener('click', function() {
             var name = this.getAttribute('data-delete');
             if (!confirm('Voorspelling van "' + name + '" verwijderen?')) return;
-            fetch('/api/admin/delete', {
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({naam:name})
-            })
+            fetch('/api/admin/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({naam:name}) })
             .then(function(r){return r.json();}).then(function(res) {
-                if (res.success) {
-                    loadParticipants();
-                    loadAdminLeaderboard();
-                    loadAllPredictions();
-                } else {
-                    alert('Fout: ' + res.error);
-                }
+                if (res.success) { loadParticipants(); loadAdminLeaderboard(); loadAllPredictions(); }
+                else alert('Fout: ' + res.error);
             });
         });
     }
@@ -1971,10 +1884,7 @@ document.getElementById('pay-search').addEventListener('input', function() {
 function loadAdminLeaderboard() {
     fetch('/api/scoreboard').then(function(r){return r.json();}).then(function(d) {
         var c = document.getElementById('admin-leaderboard-container');
-        if (!d.players || !d.players.length) {
-            c.innerHTML = '<p>Nog geen voorspellingen.</p>';
-            return;
-        }
+        if (!d.players || !d.players.length) { c.innerHTML = '<p>Nog geen voorspellingen.</p>'; return; }
         var h = '<table class="leaderboard"><thead><tr><th>#</th><th style="text-align:left;">Speler</th><th>Kampioen</th><th>Groep</th><th>R32</th><th>R16</th><th>KF</th><th>HF</th><th>Win</th><th>TOTAAL</th><th>Goals (&Delta;)</th></tr></thead><tbody>';
         for (var i = 0; i < d.players.length; i++) {
             var p = d.players[i];
@@ -1998,10 +1908,7 @@ function loadAllPredictions() {
     fetch('/api/predictions').then(function(r){return r.json();}).then(function(d) {
         var c = document.getElementById('all-predictions-container');
         var names = Object.keys(d);
-        if (!names.length) {
-            c.innerHTML = '<p>Nog geen voorspellingen.</p>';
-            return;
-        }
+        if (!names.length) { c.innerHTML = '<p>Nog geen voorspellingen.</p>'; return; }
         var h = '<p style="color:#aaa;">' + names.length + ' voorspelling(en)</p>';
         for (var i = 0; i < names.length; i++) {
             var p = d[names[i]];
