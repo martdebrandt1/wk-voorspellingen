@@ -770,7 +770,7 @@ function buildR32Matches() {
         } else { t2 = resolveTeam(m.slot2); }
         matches.push({ team1: t1, team2: t2 });
     }
-    renderRound(container, '1/32 Finales', matches, 'r32');
+    renderRound(container, '1/16 Finales', matches, 'r32');
 }
 
 function renderRound(container, title, matches, roundKey) {
@@ -812,10 +812,10 @@ function buildNextRound(rk) {
     var nexts = { r32: 'r16', r16: 'qf', qf: 'sf', sf: 'final_round' };
 
     var names = {
-        r16: '1/16 Finales',
-        qf: '1/8 Finales',
-        sf: 'Kwartfinales',
-        final_round: '&#127942; Halve Finales'
+        r16: '1/8 Finales',
+        qf: 'Kwartfinales',
+        sf: 'Halve Finales',
+        final_round: '&#127942; FINALE'
     };
 
     if (Object.keys(knockoutSelections[rk]).length < counts[rk]) return;
@@ -1001,10 +1001,10 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <h3>&#128218; Puntensysteem</h3>
 <div class="punten-grid">
 <span><strong>3pt</strong> juiste positie in groep</span>
-<span><strong>10pt</strong> 1/32 finale winnaar</span>
-<span><strong>20pt</strong> 1/16 finale winnaar</span>
-<span><strong>30pt</strong> 1/8 finale winnaar</span>
-<span><strong>50pt</strong> kwartfinale winnaar</span>
+<span><strong>10pt</strong> 1/16 finale winnaar</span>
+<span><strong>20pt</strong> 1/8 finale winnaar</span>
+<span><strong>30pt</strong> kwartfinale winnaar</span>
+<span><strong>50pt</strong> halve finale winnaar</span>
 <span><strong>100pt</strong> wereldkampioen</span>
 </div>
 <p style="margin-top:8px;color:#bb8fce;font-size:0.85em;">&#127943; <strong>Tiebreaker:</strong> bij gelijke punten wint wie het dichtst bij het echte aantal doelpunten zit. Antwoorden van deelnemers blijven geheim tot na het toernooi.</p>
@@ -1132,10 +1132,10 @@ function showPlayer(name) {
     var ko = pred.knockout || {};
     var realKo = realResults.knockout || {};
     var rounds = [
-        { key: 'ronde_van_32', name: '&#127919; 1/32 Finales (R32)' },
-        { key: 'ronde_van_16', name: '&#127919; 1/16 Finales (R16)' },
-        { key: 'kwartfinales', name: '&#127919; 1/8 Finales' },
-        { key: 'halve_finales', name: '&#127919; Kwartfinales' }
+        { key: 'ronde_van_32', name: '&#127919; 1/16 Finales' },
+        { key: 'ronde_van_16', name: '&#127919; 1/8 Finales' },
+        { key: 'kwartfinales', name: '&#127919; Kwartfinales' },
+        { key: 'halve_finales', name: '&#127919; Halve Finales' }
     ];
     for (var r = 0; r < rounds.length; r++) {
         var rd = rounds[r];
@@ -1350,44 +1350,44 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 </div>
 
 <div class="results-section">
-<h3>&#127919; 2. 1/32 Finales <span id="status-r32" class="status empty">Niet ingevuld</span> <span id="counter-r32" class="counter-badge">0/16</span></h3>
-<p class="drag-hint">Vink de 16 teams aan die de 1/16 finales bereiken.</p>
+<h3>&#127919; 2. 1/16 Finales <span id="status-r32" class="status empty">Niet ingevuld</span> <span id="counter-r32" class="counter-badge">0/16</span></h3>
+<p class="drag-hint">Vink de 16 teams aan die de 1/8 finales bereiken.</p>
 <div id="r32-container">Vul eerst de groepsfase in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-r32-row">
-<button class="btn btn-success btn-small" id="save-r32" disabled>&#128190; R32 Opslaan</button>
+<button class="btn btn-success btn-small" id="save-r32" disabled>&#128190; 1/16 Finales Opslaan</button>
 <button class="btn btn-warning btn-small" data-clear="ronde_van_32">&#128465; Wissen</button>
 </div>
 <div class="status-msg hidden" id="status-msg-r32"></div>
 </div>
 
 <div class="results-section">
-<h3>&#127919; 3. 1/16 Finales <span id="status-r16" class="status empty">Niet ingevuld</span> <span id="counter-r16" class="counter-badge">0/8</span></h3>
-<p class="drag-hint">Vink de 8 teams aan die de 1/8 finales bereiken.</p>
-<div id="r16-container">Vul eerst R32 in &amp; sla op.</div>
+<h3>&#127919; 3. 1/8 Finales <span id="status-r16" class="status empty">Niet ingevuld</span> <span id="counter-r16" class="counter-badge">0/8</span></h3>
+<p class="drag-hint">Vink de 8 teams aan die de kwartfinales bereiken.</p>
+<div id="r16-container">Vul eerst 1/16 in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-r16-row">
-<button class="btn btn-success btn-small" id="save-r16" disabled>&#128190; R16 Opslaan</button>
+<button class="btn btn-success btn-small" id="save-r16" disabled>&#128190; 1/8 Finales Opslaan</button>
 <button class="btn btn-warning btn-small" data-clear="ronde_van_16">&#128465; Wissen</button>
 </div>
 <div class="status-msg hidden" id="status-msg-r16"></div>
 </div>
 
 <div class="results-section">
-<h3>&#127919; 4. 1/8 Finales <span id="status-qf" class="status empty">Niet ingevuld</span> <span id="counter-qf" class="counter-badge">0/4</span></h3>
-<p class="drag-hint">Vink de 4 teams aan die de kwartfinales bereiken.</p>
-<div id="qf-container">Vul eerst R16 in &amp; sla op.</div>
+<h3>&#127919; 4. Kwartfinales <span id="status-qf" class="status empty">Niet ingevuld</span> <span id="counter-qf" class="counter-badge">0/4</span></h3>
+<p class="drag-hint">Vink de 4 teams aan die de halve finales bereiken.</p>
+<div id="qf-container">Vul eerst 1/8 in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-qf-row">
-<button class="btn btn-success btn-small" id="save-qf" disabled>&#128190; 1/8 Finales Opslaan</button>
+<button class="btn btn-success btn-small" id="save-qf" disabled>&#128190; Kwartfinales Opslaan</button>
 <button class="btn btn-warning btn-small" data-clear="kwartfinales">&#128465; Wissen</button>
 </div>
 <div class="status-msg hidden" id="status-msg-qf"></div>
 </div>
 
 <div class="results-section">
-<h3>&#127919; 5. Kwartfinales <span id="status-sf" class="status empty">Niet ingevuld</span> <span id="counter-sf" class="counter-badge">0/2</span></h3>
+<h3>&#127919; 5. Halve Finales <span id="status-sf" class="status empty">Niet ingevuld</span> <span id="counter-sf" class="counter-badge">0/2</span></h3>
 <p class="drag-hint">Vink de 2 finalisten aan.</p>
-<div id="sf-container">Vul eerst 1/8 finales in &amp; sla op.</div>
+<div id="sf-container">Vul eerst kwartfinales in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-sf-row">
-<button class="btn btn-success btn-small" id="save-sf" disabled>&#128190; Kwartfinales Opslaan</button>
+<button class="btn btn-success btn-small" id="save-sf" disabled>&#128190; Halve Finales Opslaan</button>
 <button class="btn btn-warning btn-small" data-clear="halve_finales">&#128465; Wissen</button>
 </div>
 <div class="status-msg hidden" id="status-msg-sf"></div>
@@ -1396,7 +1396,7 @@ h1 { text-align:center; font-size:2.2em; margin-bottom:10px; }
 <div class="results-section">
 <h3>&#127942; 6. Wereldkampioen <span id="status-finale" class="status empty">Niet ingevuld</span></h3>
 <p class="drag-hint">Selecteer de wereldkampioen.</p>
-<div id="finale-container">Vul eerst kwartfinales in &amp; sla op.</div>
+<div id="finale-container">Vul eerst halve finales in &amp; sla op.</div>
 <div class="btn-group hidden" style="justify-content:flex-start;" id="save-finale-row">
 <button class="btn btn-success btn-small" id="save-finale" disabled>&#128190; Kampioen Opslaan</button>
 <button class="btn btn-warning btn-small" data-clear="finale">&#128465; Wissen</button>
@@ -1742,10 +1742,10 @@ document.addEventListener('click', function(e) {
     var section = btn.getAttribute('data-clear');
     var labels = {
         'groepsfase': 'groepsfase',
-        'ronde_van_32': '1/32 finales (R32)',
-        'ronde_van_16': '1/16 finales (R16)',
-        'kwartfinales': '1/8 finales',
-        'halve_finales': 'kwartfinales',
+        'ronde_van_32': '1/16 finales',
+        'ronde_van_16': '1/8 finales',
+        'kwartfinales': 'kwartfinales',
+        'halve_finales': 'halve finales',
         'finale': 'wereldkampioen',
         'totaal_doelpunten': 'doelpunten (schiftingsvraag)'
     };
