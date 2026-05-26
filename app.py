@@ -571,19 +571,16 @@ function goToStep(step) {
         var errorEl = document.getElementById('form-error');
         if (!nameVal || !emailVal || !relationVal || !goalsVal) {
             errorEl.textContent = '\u26A0 Vul alle velden in!';
-            errorEl.classList.add('show');
-            return;
+            errorEl.classList.add('show'); return;
         }
         if (!validateEmail(emailVal)) {
             errorEl.textContent = '\u26A0 Vul een geldig e-mailadres in!';
-            errorEl.classList.add('show');
-            return;
+            errorEl.classList.add('show'); return;
         }
         var goalsNum = parseInt(goalsVal, 10);
         if (isNaN(goalsNum) || goalsNum < 0 || goalsNum > 500) {
             errorEl.textContent = '\u26A0 Vul een geldig aantal doelpunten in (0-500)!';
-            errorEl.classList.add('show');
-            return;
+            errorEl.classList.add('show'); return;
         }
         errorEl.classList.remove('show');
     }
@@ -593,8 +590,7 @@ function goToStep(step) {
     }
     if (step === 4) {
         if (!knockoutSelections.final_round || knockoutSelections.final_round[0] === undefined) {
-            alert('Vul eerst alle knock-out wedstrijden in!');
-            return;
+            alert('Vul eerst alle knock-out wedstrijden in!'); return;
         }
         var playerName = document.getElementById('player-name').value.trim();
         document.getElementById('mededeling-naam').textContent = playerName;
@@ -634,17 +630,14 @@ function buildGroups() {
         card.innerHTML = html;
         container.appendChild(card);
         var list = card.querySelector('.sortable-list');
-        initSortable(list);
-        initMoveButtons(list);
+        initSortable(list); initMoveButtons(list);
     }
 }
 
 function initMoveButtons(list) {
     list.addEventListener('click', function(e) {
-        var btn = e.target.closest('.move-btn');
-        if (!btn) return;
-        e.preventDefault();
-        e.stopPropagation();
+        var btn = e.target.closest('.move-btn'); if (!btn) return;
+        e.preventDefault(); e.stopPropagation();
         var li = btn.closest('li'), dir = btn.getAttribute('data-dir');
         if (dir === 'up' && li.previousElementSibling) list.insertBefore(li, li.previousElementSibling);
         else if (dir === 'down' && li.nextElementSibling) list.insertBefore(li.nextElementSibling, li);
@@ -818,27 +811,31 @@ function buildNextRound(rk) {
     var counts = { r32: 16, r16: 8, qf: 4, sf: 2, final_round: 1 };
     var nexts = { r32: 'r16', r16: 'qf', qf: 'sf', sf: 'final_round' };
 
-    /* ENKEL TITELS GECORRIGEERD */
     var names = {
-        r32: '1/16 Finales',
-        r16: '1/8 Finales',
-        qf: 'Kwartfinales',
-        sf: '&#127942; FINALE'
+        r16: '1/16 Finales',
+        qf: '1/8 Finales',
+        sf: 'Kwartfinales',
+        final_round: '&#127942; Halve Finales'
     };
 
     if (Object.keys(knockoutSelections[rk]).length < counts[rk]) return;
+
     var nk = nexts[rk];
     if (!nk) return;
+
     var order = ['r16', 'qf', 'sf', 'final_round'];
     for (var i = order.indexOf(nk); i < order.length; i++) {
         var ex = document.getElementById('round-' + order[i]);
         if (ex) ex.remove();
         knockoutSelections[order[i]] = {};
     }
+
     var winners = [];
     for (var j = 0; j < counts[rk]; j++) winners.push(knockoutSelections[rk][j]);
+
     var nm = [];
     for (var k = 0; k < winners.length; k += 2) nm.push({ team1: winners[k], team2: winners[k + 1] });
+
     renderRound(container, names[nk], nm, nk);
 }
 
